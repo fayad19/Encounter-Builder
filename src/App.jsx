@@ -1,27 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Box, Tabs, Tab, Typography } from '@mui/material';
-import MonstersTab from './components/MonstersTab';
+import { Container, Nav, Tab, Button } from 'react-bootstrap';
+import CreaturesTab from './components/CreaturesTab';
 import BattleTab from './components/BattleTab';
 import PlayersTab from './components/PlayersTab';
+import InitiativeDialog from './components/InitiativeDialog';
 
 function App() {
   // Initialize state with localStorage values
-  const [monsters, setMonsters] = useState(() => {
+  const [creatures, setCreatures] = useState(() => {
     try {
-      const savedMonsters = localStorage.getItem('monsters');
-      return savedMonsters ? JSON.parse(savedMonsters) : [];
+      const savedCreatures = localStorage.getItem('creatures');
+      return savedCreatures ? JSON.parse(savedCreatures) : [];
     } catch (error) {
-      console.error('Error loading monsters from localStorage:', error);
+      console.error('Error loading creatures from localStorage:', error);
       return [];
     }
   });
 
-  const [battleMonsters, setBattleMonsters] = useState(() => {
+  const [battleCreatures, setBattleCreatures] = useState(() => {
     try {
-      const savedBattleMonsters = localStorage.getItem('battleMonsters');
-      return savedBattleMonsters ? JSON.parse(savedBattleMonsters) : [];
+      const savedBattleCreatures = localStorage.getItem('battleCreatures');
+      return savedBattleCreatures ? JSON.parse(savedBattleCreatures) : [];
     } catch (error) {
-      console.error('Error loading battle monsters from localStorage:', error);
+      console.error('Error loading battle creatures from localStorage:', error);
       return [];
     }
   });
@@ -66,24 +67,40 @@ function App() {
     }
   });
 
-  const [currentTab, setCurrentTab] = useState(0);
+  const [currentRound, setCurrentRound] = useState(() => {
+    try {
+      const savedRound = localStorage.getItem('currentRound');
+      return savedRound ? parseInt(savedRound) : 1;
+    } catch (error) {
+      console.error('Error loading current round from localStorage:', error);
+      return 1;
+    }
+  });
+
+  const [currentTab, setCurrentTab] = useState('battle');
+  const [initiativeDialogOpen, setInitiativeDialogOpen] = useState(false);
+  const [remainingParticipants, setRemainingParticipants] = useState([]);
+
+  // Add state for initiative tie during start battle
+  const [initiativeTie, setInitiativeTie] = useState(null);
+  const [pendingInitiativeParticipant, setPendingInitiativeParticipant] = useState(null);
 
   // Save to localStorage whenever state changes
   useEffect(() => {
     try {
-      localStorage.setItem('monsters', JSON.stringify(monsters));
+      localStorage.setItem('creatures', JSON.stringify(creatures));
     } catch (error) {
-      console.error('Error saving monsters to localStorage:', error);
+      console.error('Error saving creatures to localStorage:', error);
     }
-  }, [monsters]);
+  }, [creatures]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('battleMonsters', JSON.stringify(battleMonsters));
+      localStorage.setItem('battleCreatures', JSON.stringify(battleCreatures));
     } catch (error) {
-      console.error('Error saving battle monsters to localStorage:', error);
+      console.error('Error saving battle creatures to localStorage:', error);
     }
-  }, [battleMonsters]);
+  }, [battleCreatures]);
 
   useEffect(() => {
     try {
@@ -117,31 +134,43 @@ function App() {
     }
   }, [battleStarted]);
 
-  const handleTabChange = (event, newValue) => {
-    setCurrentTab(newValue);
+  useEffect(() => {
+    try {
+      localStorage.setItem('currentRound', currentRound);
+    } catch (error) {
+      console.error('Error saving current round to localStorage:', error);
+    }
+  }, [currentRound]);
+
+  const handleTabChange = (key) => {
+    setCurrentTab(key);
   };
 
-  const handleAddMonster = (monster) => {
-    setMonsters([...monsters, { ...monster, id: Date.now() }]);
+  const handleAddCreature = (creature) => {
+    setCreatures([...creatures, { ...creature, id: Date.now() }]);
   };
 
-  const handleAddMonsterToBattle = (monster) => {
-    setBattleMonsters([...battleMonsters, { ...monster, id: Date.now() }]);
+  const handleAddCreatureToBattle = (creature) => {
+    setBattleCreatures([...battleCreatures, { ...creature, id: Date.now() }]);
   };
 
-  const handleRemoveMonster = (monsterId) => {
-    setBattleMonsters(battleMonsters.filter(monster => monster.id !== monsterId));
+  const handleRemoveCreature = (creatureId) => {
+    setBattleCreatures(battleCreatures.filter(creature => creature.id !== creatureId));
   };
 
-  const handleUpdateMonster = (updatedMonster) => {
-    // Update in monsters list
-    setMonsters(monsters.map(monster => 
-      monster.id === updatedMonster.id ? updatedMonster : monster
+  const handleDeleteCreature = (creatureId) => {
+    setCreatures(creatures.filter(creature => creature.id !== creatureId));
+  };
+
+  const handleUpdateCreature = (updatedCreature) => {
+    // Update in creatures list
+    setCreatures(creatures.map(creature => 
+      creature.id === updatedCreature.id ? updatedCreature : creature
     ));
     
-    // Update in battleMonsters list if it exists there
-    setBattleMonsters(battleMonsters.map(monster => 
-      monster.id === updatedMonster.id ? updatedMonster : monster
+    // Update in battleCreatures list if it exists there
+    setBattleCreatures(battleCreatures.map(creature => 
+      creature.id === updatedCreature.id ? updatedCreature : creature
     ));
   };
 
@@ -153,131 +182,387 @@ function App() {
     setPlayers(players.filter(p => p.id !== playerId));
   };
 
+  const handleUpdatePlayer = (playerId, updatedData) => {
+    setPlayers(players.map(player => 
+      player.id === playerId ? { ...player, ...updatedData } : player
+    ));
+  };
+
   const handleStartBattle = () => {
+    // Only use participants that are already in battleParticipants
+    const allParticipants = battleParticipants.map(participant => ({
+      ...participant,
+      type: participant.type || (participant.hp ? 'creature' : 'player')
+    }));
+    
+    if (allParticipants.length === 0) {
+      alert('Please add at least one participant to start the battle.');
+      return;
+    }
+
+    setBattleStarted(true);
+    setCurrentRound(1);
     // Clear previous battle state
     setBattleParticipants([]);
     setCurrentTurn(null);
-    setBattleStarted(false);
     
-    // Create a copy of players and monsters to track who needs initiative
-    const playersNeedingInitiative = [...players];
-    const monstersNeedingInitiative = [...battleMonsters];
-    promptForInitiative([...playersNeedingInitiative, ...monstersNeedingInitiative]);
+    setRemainingParticipants(allParticipants);
+    setInitiativeDialogOpen(true);
   };
 
   const handleEndBattle = () => {
     setBattleStarted(false);
     setCurrentTurn(null);
-    setBattleParticipants([]); // Clear the initiative order
+    setBattleParticipants([]);
+    setCurrentRound(1);
   };
 
-  const promptForInitiative = (remainingParticipants) => {
-    if (remainingParticipants.length === 0) {
-      // All participants have initiative, start the battle
-      const sortedParticipants = [...battleParticipants].sort((a, b) => 
-        parseInt(b.initiative) - parseInt(a.initiative)
-      );
-      if (sortedParticipants.length > 0) {
-        // Use a single state update to ensure proper rendering
-        Promise.resolve().then(() => {
-          setBattleStarted(true);
-          setCurrentTurn(sortedParticipants[0].battleId);
-        });
-      }
+  const handleInitiativeConfirm = (initiative) => {
+    const currentParticipant = remainingParticipants[0];
+    const newInitiative = Number(initiative);
+    // Check for tie
+    const tiedParticipants = battleParticipants.filter(p => p.initiative === newInitiative);
+    if (tiedParticipants.length > 0) {
+      setInitiativeTie({ participant: currentParticipant, tiedParticipants, newValue: newInitiative });
+      setPendingInitiativeParticipant({ ...currentParticipant, initiative: newInitiative });
+      setInitiativeDialogOpen(false);
       return;
     }
-
-    const currentParticipant = remainingParticipants[0];
-    const initiative = prompt(`Enter initiative for ${currentParticipant.name}:`);
-    
-    if (initiative !== null) {
-      const newParticipant = {
-        ...currentParticipant,
-        initiative: parseInt(initiative) || 0,
-        status: '',
-        battleId: Date.now() // Add unique ID for battle participants
-      };
-      
-      setBattleParticipants(prevParticipants => {
-        const updatedParticipants = [...prevParticipants, newParticipant];
-        // If this was the last participant, start the battle
-        if (remainingParticipants.length === 1) {
-          const sorted = [...updatedParticipants].sort((a, b) => 
-            parseInt(b.initiative) - parseInt(a.initiative)
-          );
-          if (sorted.length > 0) {
-            Promise.resolve().then(() => {
-              setBattleStarted(true);
-              setCurrentTurn(sorted[0].battleId);
-            });
-          }
+    // No tie, proceed as before
+    const newParticipant = {
+      ...currentParticipant,
+      initiative: newInitiative,
+      status: '',
+      battleId: Date.now(),
+      type: currentParticipant.type || 'creature',
+      hp: currentParticipant.hp || 0,
+      id: currentParticipant.id,
+      damageInput: ''
+    };
+    setBattleParticipants(prevParticipants => {
+      // Always just add the new participant; tie resolution is handled elsewhere
+      const updatedParticipants = [...prevParticipants, newParticipant];
+      if (remainingParticipants.length === 1) {
+        const sorted = [...updatedParticipants].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
+        if (sorted.length > 0) {
+          setCurrentTurn(sorted[0].battleId);
         }
-        return updatedParticipants;
-      });
-      
-      // Move to next participant
-      promptForInitiative(remainingParticipants.slice(1));
-    } else {
-      // If user cancels initiative input, end the battle
-      handleEndBattle();
+        return sorted;
+      }
+      return updatedParticipants;
+    });
+    // Move to next participant
+    const nextParticipants = remainingParticipants.slice(1);
+    setRemainingParticipants(nextParticipants);
+    if (nextParticipants.length === 0) {
+      setInitiativeDialogOpen(false);
     }
+  };
+
+  // Handler for resolving tie during start battle
+  const handleResolveInitiativeTie = (firstId) => {
+    if (!initiativeTie) return;
+    // Find the participant to update
+    const allTied = [initiativeTie.participant, ...initiativeTie.tiedParticipants];
+    const selected = allTied.find(p => p.battleId === firstId);
+    if (!selected) return;
+    const newInitiative = initiativeTie.newValue + 1;
+    // Check if new initiative is still a tie
+    const otherParticipants = battleParticipants.filter(p => p.battleId !== selected.battleId);
+    const stillTied = otherParticipants.filter(p => p.initiative === newInitiative);
+    if (stillTied.length > 0) {
+      setInitiativeTie({ participant: selected, tiedParticipants: stillTied, newValue: newInitiative, inline: initiativeTie.inline });
+      setPendingInitiativeParticipant({ ...selected, initiative: newInitiative });
+      return;
+    }
+    if (initiativeTie.inline) {
+      // Inline edit: update the selected participant's initiative
+      setBattleParticipants(prev => {
+        const updated = prev.map(p =>
+          p.battleId === selected.battleId ? { ...p, initiative: newInitiative } : p
+        );
+        return [...updated].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
+      });
+      setInitiativeTie(null);
+      setPendingInitiativeParticipant(null);
+      return;
+    }
+    // No more tie, add participant (start battle flow)
+    const newParticipant = {
+      ...selected,
+      initiative: newInitiative,
+      status: '',
+      battleId: Date.now(),
+      type: selected.type || 'creature',
+      hp: selected.hp || 0,
+      id: selected.id,
+      damageInput: ''
+    };
+    setBattleParticipants(prevParticipants => {
+      // Remove all tied participants with the same initiative value
+      const allTied = [initiativeTie.participant, ...initiativeTie.tiedParticipants];
+      const filtered = prevParticipants.filter(
+        p => !(p.initiative === initiativeTie.newValue && allTied.some(tied => tied.battleId === p.battleId))
+      );
+      const updatedParticipants = [...filtered, newParticipant];
+      // If the selected participant is not the pending one, add the pending participant with original initiative
+      if (pendingInitiativeParticipant && selected.battleId !== pendingInitiativeParticipant.battleId) {
+        const pendingParticipant = {
+          ...pendingInitiativeParticipant,
+          status: '',
+          battleId: Date.now(),
+          type: pendingInitiativeParticipant.type || 'creature',
+          hp: pendingInitiativeParticipant.hp || 0,
+          id: pendingInitiativeParticipant.id,
+          damageInput: ''
+        };
+        updatedParticipants.push(pendingParticipant);
+      }
+      if (remainingParticipants.length === 1) {
+        const sorted = [...updatedParticipants].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
+        if (sorted.length > 0) {
+          setCurrentTurn(sorted[0].battleId);
+        }
+        return sorted;
+      }
+      return updatedParticipants;
+    });
+    // Move to next participant
+    const nextParticipants = remainingParticipants.slice(1);
+    setRemainingParticipants(nextParticipants);
+    if (nextParticipants.length === 0) {
+      setInitiativeDialogOpen(false);
+    }
+    setInitiativeTie(null);
+    setPendingInitiativeParticipant(null);
+  };
+
+  const handleInitiativeSkip = () => {
+    const nextParticipants = remainingParticipants.slice(1);
+    setRemainingParticipants(nextParticipants);
+    
+    if (nextParticipants.length === 0) {
+      setInitiativeDialogOpen(false);
+    }
+  };
+
+  const handleInitiativeClose = () => {
+    setInitiativeDialogOpen(false);
+    handleEndBattle();
   };
 
   const handleFinishTurn = () => {
-    const sortedParticipants = [...battleParticipants].sort((a, b) => 
-      parseInt(b.initiative) - parseInt(a.initiative)
+    if (!battleParticipants.length) return;
+
+    // Sort participants by initiative (highest first)
+    const sorted = [...battleParticipants].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
+    const currentIndex = sorted.findIndex(p => p.battleId === currentTurn);
+    if (currentIndex === -1) {
+      setCurrentTurn(sorted[0].battleId);
+      return;
+    }
+    const nextIndex = (currentIndex + 1) % sorted.length;
+    const nextTurnId = sorted[nextIndex].battleId;
+    setCurrentTurn(nextTurnId);
+    // Only increment round when cycling back to the first participant
+    if (nextIndex === 0) {
+      setCurrentRound(prev => prev + 1);
+    }
+    // Ensure participants stay sorted
+    setBattleParticipants(sorted);
+  };
+
+  const handleUpdateCreatureHP = (creatureId, newHP) => {
+    // Update in battle participants
+    setBattleParticipants(prevParticipants => 
+      prevParticipants.map(participant => 
+        participant.id === creatureId 
+          ? { ...participant, hp: newHP }
+          : participant
+      )
     );
-    const currentIndex = sortedParticipants.findIndex(p => p.battleId === currentTurn);
-    const nextIndex = (currentIndex + 1) % sortedParticipants.length;
-    setCurrentTurn(sortedParticipants[nextIndex].battleId);
+    
+    // Update in battle creatures
+    setBattleCreatures(prevCreatures => 
+      prevCreatures.map(creature => 
+        creature.id === creatureId 
+          ? { ...creature, hp: newHP }
+          : creature
+      )
+    );
+  };
+
+  const handleAddToBattle = (entity) => {
+    let newName = entity.name;
+    if ((entity.type || (entity.hp ? 'creature' : 'player')) === 'creature') {
+      // Count how many creatures with the same base name are already in battle
+      const baseName = entity.name.replace(/ \d+$/, '');
+      const sameNameCount = battleParticipants.filter(
+        p => (p.type === 'creature') && p.name && p.name.startsWith(baseName)
+      ).length;
+      if (sameNameCount > 0) {
+        newName = `${baseName} ${sameNameCount + 1}`;
+      }
+    }
+    const newParticipant = {
+      ...entity,
+      name: newName,
+      battleId: Date.now(),
+      initiative: null,
+      type: entity.type || (entity.hp ? 'creature' : 'player')
+    };
+    setBattleParticipants(prev => [...prev, newParticipant]);
+  };
+
+  const handleRemoveParticipant = (battleId) => {
+    setBattleParticipants(prev => prev.filter(p => p.battleId !== battleId));
+  };
+
+  const handleRemoveAllParticipants = () => {
+    setBattleParticipants([]);
+  };
+
+  const handleRemoveAllPlayers = () => {
+    setBattleParticipants(prev => prev.filter(p => p.type !== 'player'));
+  };
+
+  const handleRemoveAllCreatures = () => {
+    setBattleParticipants(prev => prev.filter(p => p.type !== 'creature'));
+  };
+
+  const handleRemoveAllSavedCreatures = () => {
+    setBattleCreatures([]);
+  };
+
+  const handleRemoveAllSavedPlayers = () => {
+    setPlayers([]);
+  };
+
+  // Update initiative and sort participants
+  const handleUpdateParticipantInitiative = (battleId, newInitiative) => {
+    // Find the participant being edited
+    const participant = battleParticipants.find(p => p.battleId === battleId);
+    // Find all other participants with the same initiative
+    const tiedParticipants = battleParticipants.filter(
+      p => p.battleId !== battleId && p.initiative === newInitiative
+    );
+    if (tiedParticipants.length > 0) {
+      setInitiativeTie({ participant, tiedParticipants, newValue: newInitiative, inline: true });
+      setPendingInitiativeParticipant({ ...participant, initiative: newInitiative });
+      return;
+    }
+    // No tie, update as normal
+    setBattleParticipants(prev => {
+      const updated = prev.map(p => p.battleId === battleId ? { ...p, initiative: newInitiative } : p);
+      return [...updated].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
+    });
+  };
+
+  // Update HP for a participant in battle
+  const handleUpdateParticipantHP = (battleId, newHP) => {
+    setBattleParticipants(prev => prev.map(p => p.battleId === battleId ? { ...p, hp: newHP } : p));
+  };
+
+  // Update a participant in battle by battleId
+  const handleUpdateBattleParticipant = (updatedParticipant) => {
+    setBattleParticipants(prev => prev.map(p => p.battleId === updatedParticipant.battleId ? { ...p, ...updatedParticipant } : p));
   };
 
   return (
-    <Container maxWidth="xl">
-      <Box sx={{ my: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom align="center">
-          Pathfinder 2e Encounter Builder
-        </Typography>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs value={currentTab} onChange={handleTabChange} centered>
-            <Tab label="Battle" />
-            <Tab label="Monsters" />
-            <Tab label="Players" />
-          </Tabs>
-        </Box>
-        {currentTab === 0 && (
-          <BattleTab 
-            participants={battleParticipants} 
-            monsters={battleMonsters}
-            onUpdateMonster={handleUpdateMonster}
-            currentTurn={currentTurn}
-            battleStarted={battleStarted}
-            onStartBattle={handleStartBattle}
-            onFinishTurn={handleFinishTurn}
-            setBattleStarted={setBattleStarted}
-            setCurrentTurn={setCurrentTurn}
-            players={players}
-            battleMonsters={battleMonsters}
-            onEndBattle={handleEndBattle}
-            onRemoveMonster={handleRemoveMonster}
-          />
-        )}
-        {currentTab === 1 && (
-          <MonstersTab 
-            onAddMonster={handleAddMonster} 
-            onAddMonsterToBattle={handleAddMonsterToBattle}
-            onUpdateMonster={handleUpdateMonster}
-            monsters={monsters} 
-          />
-        )}
-        {currentTab === 2 && (
-          <PlayersTab
-            players={players}
-            onAddPlayer={handleAddPlayer}
-            onDeletePlayer={handleDeletePlayer}
-          />
-        )}
-      </Box>
+    <Container fluid className="mt-3">
+      <Tab.Container activeKey={currentTab} onSelect={handleTabChange}>
+        <Nav variant="tabs" className="mb-3 d-flex justify-content-center">
+          <Nav.Item>
+            <Nav.Link eventKey="battle">Battle</Nav.Link>
+          </Nav.Item>
+          <Nav.Item>
+            <Nav.Link eventKey="creatures">Creatures</Nav.Link>
+          </Nav.Item>
+          <Nav.Item>
+            <Nav.Link eventKey="players">Players</Nav.Link>
+          </Nav.Item>
+        </Nav>
+
+        <Tab.Content>
+          <Tab.Pane eventKey="battle">
+            <BattleTab
+              participants={battleParticipants}
+              battleStarted={battleStarted}
+              currentTurn={currentTurn}
+              currentRound={currentRound}
+              onStartBattle={handleStartBattle}
+              onFinishTurn={handleFinishTurn}
+              onEndBattle={handleEndBattle}
+              onRemoveParticipant={handleRemoveParticipant}
+              onRemoveAllParticipants={handleRemoveAllParticipants}
+              onRemoveAllPlayers={handleRemoveAllPlayers}
+              onRemoveAllCreatures={handleRemoveAllCreatures}
+              onUpdateParticipantInitiative={handleUpdateParticipantInitiative}
+              onUpdateParticipantHP={handleUpdateParticipantHP}
+              onUpdateBattleParticipant={handleUpdateBattleParticipant}
+              initiativeTie={initiativeTie}
+              onResolveInitiativeTie={handleResolveInitiativeTie}
+            />
+          </Tab.Pane>
+          <Tab.Pane eventKey="creatures">
+            <CreaturesTab
+              savedCreatures={creatures}
+              onAddCreature={handleAddCreature}
+              onUpdateCreature={handleUpdateCreature}
+              onDeleteCreature={handleDeleteCreature}
+              onAddToBattle={handleAddToBattle}
+            />
+          </Tab.Pane>
+          <Tab.Pane eventKey="players">
+            <PlayersTab
+              players={players}
+              onAddPlayer={handleAddPlayer}
+              onUpdatePlayer={handleUpdatePlayer}
+              onDeletePlayer={handleDeletePlayer}
+              onAddToBattle={handleAddToBattle}
+            />
+          </Tab.Pane>
+        </Tab.Content>
+      </Tab.Container>
+      
+      <InitiativeDialog
+        open={initiativeDialogOpen}
+        onClose={handleInitiativeClose}
+        onConfirm={handleInitiativeConfirm}
+        onSkip={handleInitiativeSkip}
+        participant={remainingParticipants[0]}
+      />
+
+      {(initiativeTie && handleResolveInitiativeTie && initiativeTie.participant && initiativeTie.tiedParticipants) ? (
+        <div className="modal show fade d-block" tabIndex="-1" role="dialog" style={{ background: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog" role="document">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Initiative Tie</h5>
+                <button type="button" className="btn-close" onClick={() => handleResolveInitiativeTie(null)}></button>
+              </div>
+              <div className="modal-body">
+                <p>
+                  Multiple participants have initiative <strong>{initiativeTie.newValue}</strong>.<br />
+                  Who should go first?
+                </p>
+                <ul>
+                  {[initiativeTie.participant, ...initiativeTie.tiedParticipants].map(p => (
+                    <li key={p.battleId}>
+                      <Button variant="outline-primary" onClick={() => handleResolveInitiativeTie(p.battleId)}>
+                        {p.name}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="modal-footer">
+                <Button variant="secondary" onClick={() => handleResolveInitiativeTie(null)}>Cancel</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </Container>
   );
 }

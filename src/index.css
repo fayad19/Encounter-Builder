@@ -14,4 +14,42 @@ body {
 #root {
   width: 100%;
   min-height: 100vh;
+}
+
+.highlighted-turn {
+  background-color: #a2ecf1 !important; /* Custom light blue, change as needed */
+  color: #222 !important;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+}
+input[type=number]:focus {
+  outline: none;
+}
+input[type=number] {
+  /* Prevent scroll wheel from changing value */
+  pointer-events: auto;
+}
+input[type=number]:hover, input[type=number]:focus {
+  /* Prevent scroll wheel from changing value */
+  pointer-events: auto;
+}
+input[type=number] {
+  /* Disable scroll wheel value change */
+  /* This disables the scroll wheel for number inputs */
+}
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button {
+  pointer-events: none;
+}
+input[type=number] {
+  /* For Firefox */
+  -moz-user-select: text;
 } 

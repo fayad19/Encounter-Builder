@@ -1,130 +1,168 @@
 import React, { useState } from 'react';
-import { Box, TextField, Button, Grid, Paper, Typography, List, ListItem, ListItemText, Divider, IconButton } from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import SaveIcon from '@mui/icons-material/Save';
-import CancelIcon from '@mui/icons-material/Cancel';
+import { Container, Row, Col, Card, Form, Button, ListGroup, ListGroupItem } from 'react-bootstrap';
+import { Plus, Pencil, Trash } from 'react-bootstrap-icons';
+import DeleteConfirmationDialog from './DeleteConfirmationDialog';
 
-function PlayersTab({ players, onAddPlayer, onDeletePlayer }) {
-  const [newPlayer, setNewPlayer] = useState({ name: '' });
+function PlayersTab({ players = [], onAddPlayer, onUpdatePlayer, onDeletePlayer, onAddToBattle }) {
+  const [newPlayer, setNewPlayer] = useState({ name: '', hp: '', ac: '' });
   const [editingPlayer, setEditingPlayer] = useState(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [playerToDelete, setPlayerToDelete] = useState(null);
 
-  const handleAddPlayer = () => {
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setNewPlayer(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
     if (newPlayer.name) {
-      onAddPlayer({ ...newPlayer, id: Date.now() });
-      setNewPlayer({ name: '' });
+      if (editingPlayer) {
+        onUpdatePlayer(editingPlayer.id, newPlayer);
+        setEditingPlayer(null);
+      } else {
+        onAddPlayer({ ...newPlayer, id: Date.now() });
+      }
+      setNewPlayer({ name: '', hp: '', ac: '' });
     }
   };
 
-  const handleEditPlayer = (player) => {
+  const handleEditClick = (player) => {
+    setNewPlayer({ name: player.name, hp: player.hp || '', ac: player.ac || '' });
     setEditingPlayer(player);
-  };
-
-  const handleSaveEdit = () => {
-    if (editingPlayer.name) {
-      onAddPlayer({ ...editingPlayer, id: Date.now() });
-      setEditingPlayer(null);
-    }
   };
 
   const handleCancelEdit = () => {
     setEditingPlayer(null);
+    setNewPlayer({ name: '', hp: '', ac: '' });
+  };
+
+  const handleDeleteClick = (player) => {
+    setPlayerToDelete(player);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (playerToDelete) {
+      onDeletePlayer(playerToDelete.id);
+      setDeleteDialogOpen(false);
+      setPlayerToDelete(null);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+    setPlayerToDelete(null);
   };
 
   return (
-    <Box sx={{ mt: 2 }}>
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <Typography variant="h6" gutterBottom>
-          Add New Player
-        </Typography>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Player Name"
-              value={newPlayer.name}
-              onChange={(e) => setNewPlayer({ ...newPlayer, name: e.target.value })}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <Button 
-              variant="contained" 
-              onClick={handleAddPlayer}
-              disabled={!newPlayer.name}
-            >
-              Add Player
-            </Button>
-          </Grid>
-        </Grid>
-      </Paper>
-
-      <Paper sx={{ p: 2 }}>
-        <Typography variant="h6" gutterBottom>
-          Player List
-        </Typography>
-        <List>
-          {players.map((player) => (
-            <React.Fragment key={player.id}>
-              <ListItem
-                secondaryAction={
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <IconButton 
-                      edge="end" 
-                      color="primary"
-                      onClick={() => handleEditPlayer(player)}
-                      title="Edit"
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton 
-                      edge="end" 
-                      color="error"
-                      onClick={() => onDeletePlayer(player.id)}
-                      title="Delete"
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </Box>
-                }
-                sx={{ pr: 12 }}
-              >
-                {editingPlayer?.id === player.id ? (
-                  <Box sx={{ display: 'flex', gap: 2, width: '100%' }}>
-                    <TextField
-                      size="small"
-                      label="Name"
-                      value={editingPlayer.name}
-                      onChange={(e) => setEditingPlayer({ ...editingPlayer, name: e.target.value })}
-                    />
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      <IconButton 
-                        color="primary"
-                        onClick={handleSaveEdit}
-                        title="Save"
-                      >
-                        <SaveIcon />
-                      </IconButton>
-                      <IconButton 
-                        color="error"
-                        onClick={handleCancelEdit}
-                        title="Cancel"
-                      >
-                        <CancelIcon />
-                      </IconButton>
-                    </Box>
-                  </Box>
-                ) : (
-                  <ListItemText
-                    primary={player.name}
+    <Container className="mt-4">
+      <Row>
+        <Col md={8}>
+          <Card>
+            <Card.Header>
+              <h5 className="mb-0">{editingPlayer ? 'Edit Player' : 'Add New Player'}</h5>
+            </Card.Header>
+            <Card.Body>
+              <Form onSubmit={handleSubmit}>
+                <Form.Group className="mb-3">
+                  <Form.Label>Player Name</Form.Label>
+                  <Form.Control
+                    type="text"
+                    name="name"
+                    value={newPlayer.name}
+                    onChange={handleInputChange}
+                    placeholder="Enter player name"
                   />
-                )}
-              </ListItem>
-              <Divider />
-            </React.Fragment>
-          ))}
-        </List>
-      </Paper>
-    </Box>
+                </Form.Group>
+                <Form.Group className="mb-3">
+                  <Form.Label>HP</Form.Label>
+                  <Form.Control
+                    type="number"
+                    name="hp"
+                    value={newPlayer.hp}
+                    onChange={handleInputChange}
+                    placeholder="Enter HP"
+                  />
+                </Form.Group>
+                <Form.Group className="mb-3">
+                  <Form.Label>AC</Form.Label>
+                  <Form.Control
+                    type="number"
+                    name="ac"
+                    value={newPlayer.ac}
+                    onChange={handleInputChange}
+                    placeholder="Enter AC"
+                  />
+                </Form.Group>
+                <div className="d-flex gap-2">
+                  <Button variant="primary" type="submit" disabled={!newPlayer.name}>
+                    {editingPlayer ? 'Save Changes' : 'Add Player'}
+                  </Button>
+                  {editingPlayer && (
+                    <Button variant="secondary" onClick={handleCancelEdit}>
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+              </Form>
+            </Card.Body>
+          </Card>
+        </Col>
+
+        <Col md={4}>
+          <Card>
+            <Card.Header>
+              <h5 className="mb-0">Saved Players</h5>
+            </Card.Header>
+            <ListGroup variant="flush">
+              {players.map((player) => (
+                <ListGroupItem key={player.id} className="d-flex justify-content-between align-items-center">
+                  <span>
+                    {player.name}
+                    <span className="ms-2 text-muted small">HP: {player.hp || 0} | AC: {player.ac || 0}</span>
+                  </span>
+                  <div className="d-flex gap-2">
+                    <Button
+                      variant="outline-primary"
+                      size="sm"
+                      onClick={() => onAddToBattle(player)}
+                    >
+                      <Plus />
+                    </Button>
+                    <Button
+                      variant="outline-primary"
+                      size="sm"
+                      onClick={() => handleEditClick(player)}
+                    >
+                      <Pencil />
+                    </Button>
+                    <Button
+                      variant="outline-danger"
+                      size="sm"
+                      onClick={() => handleDeleteClick(player)}
+                    >
+                      <Trash />
+                    </Button>
+                  </div>
+                </ListGroupItem>
+              ))}
+            </ListGroup>
+          </Card>
+        </Col>
+      </Row>
+
+      <DeleteConfirmationDialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Player"
+        message={`Are you sure you want to delete ${playerToDelete?.name || 'this player'}?`}
+      />
+    </Container>
   );
 }
 
