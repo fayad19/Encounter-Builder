@@ -486,13 +486,15 @@ function App() {
   // Update HP for a participant in battle
   const handleUpdateParticipantHP = (battleId, newHP) => {
     console.log('handleUpdateParticipantHP called with', { battleId, newHP });
+    // Ensure HP cannot go below 0
+    const clampedHP = Math.max(0, Number(newHP));
     setBattleParticipants(prev => {
       const updated = prev.map(p => {
         console.log('Checking participant', p.name, p.battleId, p.type, p.hp);
         if (p.battleId === battleId) {
-          console.log('Matched participant', p.name, 'type:', p.type, 'old HP:', p.hp, 'new HP:', newHP);
+          console.log('Matched participant', p.name, 'type:', p.type, 'old HP:', p.hp, 'new HP:', clampedHP);
           // If player and HP drops to 0 or below, boost initiative if needed
-          if (p.type === 'player' && Number(newHP) <= 0) {
+          if (p.type === 'player' && clampedHP === 0) {
             const maxCreatureInit = Math.max(
               ...prev.filter(c => c.type === 'creature').map(c => Number(c.initiative) || 0),
               0
@@ -502,17 +504,17 @@ function App() {
               newInitiative = maxCreatureInit + 1;
               console.log(`Boosting player initiative:`, { name: p.name, oldInit: p.initiative, newInit: newInitiative });
             }
-            return { ...p, hp: newHP, initiative: newInitiative };
+            return { ...p, hp: clampedHP, initiative: newInitiative };
           }
-          return { ...p, hp: newHP };
+          return { ...p, hp: clampedHP };
         }
         return p;
       });
       // Sort by initiative after any updates
       const sorted = [...updated].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
-      // If we're updating a player's HP to 0 or below, we need to ensure they're in the right position
+      // If we're updating a player's HP to 0, we need to ensure they're in the right position
       const updatedPlayer = sorted.find(p => p.battleId === battleId);
-      if (updatedPlayer?.type === 'player' && Number(newHP) <= 0) {
+      if (updatedPlayer?.type === 'player' && clampedHP === 0) {
         // Find the highest creature initiative
         const highestCreature = sorted.find(p => p.type === 'creature');
         if (highestCreature && updatedPlayer.initiative <= highestCreature.initiative) {

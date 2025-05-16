@@ -15,8 +15,6 @@ function BattleTab({
   onEndBattle,
   onRemoveParticipant,
   onRemoveAllParticipants,
-  onRemoveAllPlayers,
-  onRemoveAllCreatures,
   battleStarted: isBattleStarted,
   currentTurn,
   currentRound,
@@ -27,8 +25,6 @@ function BattleTab({
   onResolveInitiativeTie,
   onInitiativeTie
 }) {
-  const [initiativeDialogOpen, setInitiativeDialogOpen] = useState(false);
-  const [currentParticipantIndex, setCurrentParticipantIndex] = useState(0);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [participantToDelete, setParticipantToDelete] = useState(null);
   const [endBattleDialogOpen, setEndBattleDialogOpen] = useState(false);
@@ -88,27 +84,6 @@ function BattleTab({
     }));
   };
 
-  const handleEditCreatureAttackChange = (index, field, value) => {
-    setCreatureToEdit(prev => ({
-      ...prev,
-      attacks: prev.attacks.map((atk, i) => i === index ? { ...atk, [field]: value } : atk)
-    }));
-  };
-
-  const handleEditCreatureAddAttack = () => {
-    setCreatureToEdit(prev => ({
-      ...prev,
-      attacks: [...(prev.attacks || []), { attackName: '', firstHitModifier: '', secondHitModifier: '', thirdHitModifier: '', attackType: '', damage: '' }]
-    }));
-  };
-
-  const handleEditCreatureRemoveAttack = (index) => {
-    setCreatureToEdit(prev => ({
-      ...prev,
-      attacks: prev.attacks.filter((_, i) => i !== index)
-    }));
-  };
-
   const handleEditCreatureSave = () => {
     if (creatureToEdit && onUpdateBattleParticipant) {
       onUpdateBattleParticipant(creatureToEdit);
@@ -162,19 +137,6 @@ function BattleTab({
     }
   };
 
-  // Add a helper to get the next valid turn (skipping dead creatures)
-  const getNextValidTurn = (sorted, currentIndex) => {
-    let nextIndex = (currentIndex + 1) % sorted.length;
-    let looped = false;
-    while (sorted[nextIndex].type === 'creature' && Number(sorted[nextIndex].hp) <= 0) {
-      nextIndex = (nextIndex + 1) % sorted.length;
-      if (nextIndex === currentIndex) {
-        looped = true;
-        break;
-      }
-    }
-    return looped ? null : nextIndex;
-  };
 
   // Move player with 0 HP before highest-initiative creature
   React.useEffect(() => {
@@ -326,6 +288,17 @@ function BattleTab({
                               -
                             </Button>
                           </div>
+
+                          <div>
+                            <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
+                              Fortitude: {participant.fortitude}
+                              <span className="ms-2">
+                                Reflex: {participant.reflex}
+                              </span>
+                              Will: {participant.will}
+                            </div>
+                          </div>
+
                           {participant.attacks && Array.isArray(participant.attacks) && participant.attacks.length > 0 && (
                             <div>
                               {/* Melee Attacks Section */}
@@ -445,6 +418,7 @@ function BattleTab({
                               )}
                             </div>
                           )}
+
                         </>
                       ) : (
                         <div className="d-flex align-items-center">
@@ -535,24 +509,48 @@ function BattleTab({
               </div>
               <div className="modal-body">
                 <form onSubmit={e => { e.preventDefault(); handleEditCreatureSave(); }}>
-                  <div className="mb-3">
-                    <label className="form-label">Creature Name</label>
-                    <input type="text" className="form-control" value={creatureToEdit.name} onChange={e => handleEditCreatureChange('name', e.target.value)} />
+                  <div className="row">
+                    <div className="col-md-8">
+                      <label className="form-label">Creature Name</label>
+                      <input type="text" className="form-control" value={creatureToEdit.name} onChange={e => handleEditCreatureChange('name', e.target.value)} />
+                    </div>
+                    <div className="col-md-4">
+                      <label className="form-label">Perception</label>
+                      <input type="text" className="form-control" value={creatureToEdit.perception} onChange={e => handleEditCreatureChange('perception', e.target.value)} />
+                    </div>
                   </div>
                   <div className="row">
-                    <div className="col-md-6 mb-3">
+                    <div className="col-md-4 mb-3">
                       <label className="form-label">HP</label>
                       <input type="number" className="form-control" value={creatureToEdit.hp} onChange={e => handleEditCreatureChange('hp', e.target.value)} />
                     </div>
-                    <div className="col-md-6 mb-3">
+                    <div className="col-md-4 mb-3">
                       <label className="form-label">AC</label>
                       <input type="number" className="form-control" value={creatureToEdit.ac} onChange={e => handleEditCreatureChange('ac', e.target.value)} />
                     </div>
+                    <div className="col-md-4 mb-3">
+                      <label className="form-label">DC</label>
+                      <input type="number" className="form-control" value={creatureToEdit.dc} onChange={e => handleEditCreatureChange('dc', e.target.value)} />
+                    </div>
                   </div>
-                  <div className="mb-3">
+                  <div className="row">
+                    <div className="col-md-4 mb-3">
+                      <label className="form-label">Fortitude</label>
+                      <input type="number" className="form-control" value={creatureToEdit.fortitude} onChange={e => handleEditCreatureChange('fortitude', e.target.value)} />
+                    </div>
+                    <div className="col-md-4 mb-3">
+                      <label className="form-label">Reflex</label>
+                      <input type="number" className="form-control" value={creatureToEdit.reflex} onChange={e => handleEditCreatureChange('reflex', e.target.value)} />
+                    </div>
+                    <div className="col-md-4 mb-3">
+                      <label className="form-label">Will</label>
+                      <input type="number" className="form-control" value={creatureToEdit.will} onChange={e => handleEditCreatureChange('will', e.target.value)} />
+                    </div>
+                  </div>
+                  {/* <div className="mb-3">
                     <label className="form-label">Penalty</label>
                     <input type="number" className="form-control" value={creatureToEdit.penalty || ''} onChange={e => handleEditCreatureChange('penalty', e.target.value)} />
-                  </div>
+                  </div> */}
                   <div className="mb-3">
                     <div className="d-flex justify-content-between align-items-center mb-2">
                       <h6 className="mb-0">Attacks</h6>

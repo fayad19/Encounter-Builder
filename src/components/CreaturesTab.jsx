@@ -17,14 +17,16 @@ function CreaturesTab({
     name: '',
     hp: '',
     ac: '',
-    //initiative: '',
+    perception: '',
+    fortitude: '',
+    reflex: '',
+    will: '',
     penalty: '',
     attacks: [] // Start with no attacks
   });
   const [editingCreature, setEditingCreature] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [creatureToDelete, setCreatureToDelete] = useState(null);
-  const [spellAttackAreaType, setSpellAttackAreaType] = useState('');
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -34,17 +36,17 @@ function CreaturesTab({
     }));
   };
 
-  const handleAttackChange = (index, field, value) => {
-    const updatedAttacks = [...newCreature.attacks];
-    updatedAttacks[index] = {
-      ...updatedAttacks[index],
-      [field]: value
-    };
-    setNewCreature(prev => ({
-      ...prev,
-      attacks: updatedAttacks
-    }));
-  };
+  // const handleAttackChange = (index, field, value) => {
+  //   const updatedAttacks = [...newCreature.attacks];
+  //   updatedAttacks[index] = {
+  //     ...updatedAttacks[index],
+  //     [field]: value
+  //   };
+  //   setNewCreature(prev => ({
+  //     ...prev,
+  //     attacks: updatedAttacks
+  //   }));
+  // };
 
   const handleAddAttack = (type) => {
     if (type === 'spell') {
@@ -165,19 +167,35 @@ function CreaturesTab({
             </Card.Header>
             <Card.Body>
               <Form onSubmit={handleSubmit}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Creature Name</Form.Label>
-                  <Form.Control
-                    type="text"
-                    name="name"
-                    value={newCreature.name}
-                    onChange={handleInputChange}
-                    placeholder="Enter creature name"
-                  />
-                </Form.Group>
-
                 <Row>
-                  <Col md={6}>
+                  <Col md={8}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Creature Name</Form.Label>
+                      <Form.Control
+                        type="text"
+                        name="name"
+                        value={newCreature.name}
+                        onChange={handleInputChange}
+                        placeholder="Enter creature name"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Perception</Form.Label>
+                      <Form.Control
+                        type="number"
+                        name="perception"
+                        value={newCreature.perception}
+                        onChange={handleInputChange}
+                        placeholder="Enter Perception"
+                      />
+                    </Form.Group>
+                  </Col>
+                </Row>
+                
+                <Row>
+                  <Col md={4}>
                     <Form.Group className="mb-3">
                       <Form.Label>HP</Form.Label>
                       <Form.Control
@@ -189,7 +207,7 @@ function CreaturesTab({
                       />
                     </Form.Group>
                   </Col>
-                  <Col md={6}>
+                  <Col md={4}>
                     <Form.Group className="mb-3">
                       <Form.Label>AC</Form.Label>
                       <Form.Control
@@ -201,10 +219,61 @@ function CreaturesTab({
                       />
                     </Form.Group>
                   </Col>
+                  <Col md={4}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>DC</Form.Label>
+                      <Form.Control
+                        type="number"
+                        name="dc"
+                        value={newCreature.dc}
+                        onChange={handleInputChange}
+                        placeholder="Enter DC"
+                      />
+                    </Form.Group>
+                  </Col>
                 </Row>
 
                 <Row>
-                  {/* <Col md={6}>
+                  <Col md={4}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Fortitude</Form.Label>
+                      <Form.Control
+                        type="number"
+                        name="fortitude"
+                        value={newCreature.fortitude}
+                        onChange={handleInputChange}
+                        placeholder="Enter Fortitude"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Reflex</Form.Label>
+                      <Form.Control
+                        type="number"
+                        name="reflex"
+                        value={newCreature.reflex}
+                        onChange={handleInputChange}
+                        placeholder="Enter Reflex"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Will</Form.Label>
+                      <Form.Control
+                        type="number"
+                        name="will"
+                        value={newCreature.will}
+                        onChange={handleInputChange}
+                        placeholder="Enter Will"
+                      />
+                    </Form.Group>
+                  </Col>
+                </Row>
+                {/*
+                <Row>
+                  { <Col md={6}>
                     <Form.Group className="mb-3">
                       <Form.Label>Initiative</Form.Label>
                       <Form.Control
@@ -215,7 +284,7 @@ function CreaturesTab({
                         placeholder="Enter initiative"
                       />
                     </Form.Group>
-                  </Col> */}
+                  </Col> }
                   <Col md={6}>
                     <Form.Group className="mb-3">
                       <Form.Label>Penalty</Form.Label>
@@ -229,7 +298,7 @@ function CreaturesTab({
                     </Form.Group>
                   </Col>
                 </Row>
-
+                */}
                 {/* Attacks Section */}
                 <CreatureAttackForm
                   attacks={newCreature.attacks}
