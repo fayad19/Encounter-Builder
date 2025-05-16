@@ -55,6 +55,7 @@ function CreaturesTab({
           {
             attackName: '',
             attackType: 'spell',
+            attackCategory: 'spell',
             tradition: [],
             actions: '1',
             targetOrArea: 'target',
@@ -71,6 +72,7 @@ function CreaturesTab({
           {
             attackName: '',
             attackType: type,
+            attackCategory: type,
             firstHitModifier: '',
             secondHitModifier: '',
             thirdHitModifier: '',

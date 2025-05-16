@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, Row, Col, Form, Button } from 'react-bootstrap';
 import { Trash, Plus } from 'react-bootstrap-icons';
 import Dropdown from 'react-bootstrap/Dropdown';
@@ -17,6 +17,9 @@ function MonsterAttackForm({ attacks, onChange, onAddAttack, onRemoveAttack }) {
 
   // Helper to get the category for an attack (fallback to attackType if missing)
   const getAttackCategory = (attack) => attack.attackCategory || attack.attackType;
+
+  // Add local state for open dropdown index
+  const [openDropdown, setOpenDropdown] = useState(null);
 
   return (
     <>
@@ -152,43 +155,39 @@ function MonsterAttackForm({ attacks, onChange, onAddAttack, onRemoveAttack }) {
                     <Col md={6}>
                       <Form.Group className="mb-2">
                         <Form.Label>Tradition</Form.Label>
-                        <DropdownButton
-                          id={`tradition-dropdown-${index}`}
-                          title={
-                            (attack.tradition && attack.tradition.length > 0)
+                        <Dropdown show={openDropdown === index} onToggle={show => setOpenDropdown(show ? index : null)}>
+                          <Dropdown.Toggle variant="outline-secondary" className="w-100">
+                            {(attack.tradition && attack.tradition.length > 0)
                               ? attack.tradition.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(', ')
-                              : 'Select tradition(s)'
-                          }
-                          variant="outline-secondary"
-                          className="w-100"
-                        >
-                          {['arcane', 'divine', 'occult', 'primal'].map(trad => (
-                            <Dropdown.Item
-                              key={trad}
-                              as="button"
-                              className="d-flex align-items-center"
-                              onMouseDown={e => e.stopPropagation()}
-                              onClick={e => {
-                                e.preventDefault();
-                                const current = attack.tradition || [];
-                                if (current.includes(trad)) {
-                                  handleAttackChange(index, 'tradition', current.filter(t => t !== trad));
-                                } else {
-                                  handleAttackChange(index, 'tradition', [...current, trad]);
-                                }
-                              }}
-                            >
-                              <Form.Check
-                                type="checkbox"
-                                checked={attack.tradition && attack.tradition.includes(trad)}
-                                onMouseDown={e => e.stopPropagation()}
-                                onChange={() => {}}
-                                label={trad.charAt(0).toUpperCase() + trad.slice(1)}
-                                className="me-2"
-                              />
-                            </Dropdown.Item>
-                          ))}
-                        </DropdownButton>
+                              : 'Select tradition(s)'}
+                          </Dropdown.Toggle>
+                          <Dropdown.Menu>
+                            {['arcane', 'divine', 'occult', 'primal'].map(trad => (
+                              <Dropdown.Item
+                                key={trad}
+                                as="button"
+                                className="d-flex align-items-center"
+                                onClick={e => {
+                                  e.preventDefault();
+                                  const current = attack.tradition || [];
+                                  if (current.includes(trad)) {
+                                    handleAttackChange(index, 'tradition', current.filter(t => t !== trad));
+                                  } else {
+                                    handleAttackChange(index, 'tradition', [...current, trad]);
+                                  }
+                                }}
+                              >
+                                <Form.Check
+                                  type="checkbox"
+                                  checked={attack.tradition && attack.tradition.includes(trad)}
+                                  readOnly
+                                  label={trad.charAt(0).toUpperCase() + trad.slice(1)}
+                                  className="me-2"
+                                />
+                              </Dropdown.Item>
+                            ))}
+                          </Dropdown.Menu>
+                        </Dropdown>
                       </Form.Group>
                     </Col>
                   </Row>

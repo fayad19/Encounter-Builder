@@ -8,12 +8,12 @@ import action2 from '../assets/action-2.png';
 import action3 from '../assets/action-3.png';
 import CreatureAttackForm from './CreatureAttackForm';
 
-function BattleTab({ 
-  participants = [], 
-  onStartBattle, 
+function BattleTab({
+  participants = [],
+  onStartBattle,
   onFinishTurn,
   onEndBattle,
-  onRemoveParticipant, 
+  onRemoveParticipant,
   onRemoveAllParticipants,
   onRemoveAllPlayers,
   onRemoveAllCreatures,
@@ -24,7 +24,8 @@ function BattleTab({
   onUpdateBattleParticipant,
   onUpdateParticipantInitiative,
   initiativeTie,
-  onResolveInitiativeTie
+  onResolveInitiativeTie,
+  onInitiativeTie
 }) {
   const [initiativeDialogOpen, setInitiativeDialogOpen] = useState(false);
   const [currentParticipantIndex, setCurrentParticipantIndex] = useState(0);
@@ -37,7 +38,6 @@ function BattleTab({
   const [editingInitiativeId, setEditingInitiativeId] = useState(null);
   const [initiativeInputValue, setInitiativeInputValue] = useState('');
   const [hpInputValues, setHpInputValues] = useState({});
-  const [initiativeCollision, setInitiativeCollision] = useState(null);
 
   const handleStartBattle = () => {
     if (participants.length > 0) {
@@ -130,49 +130,21 @@ function BattleTab({
     const newValue = initiativeInputValue === '' ? null : Number(initiativeInputValue);
     setEditingInitiativeId(null);
     setInitiativeInputValue('');
+    console.log('handleInitiativeBlurOrSave called for', participant.name, 'with newValue:', newValue);
     if (onUpdateParticipantInitiative) {
       // Check for tie
       const tiedParticipants = participants.filter(p => p.battleId !== participant.battleId && p.initiative === newValue);
       if (tiedParticipants.length > 0) {
-        setInitiativeCollision({ participant, tiedParticipants, newValue });
+        // Use competitive selection modal for inline edit
+        if (typeof onInitiativeTie === 'function') {
+          // Set the tie state in the parent (App.jsx)
+          onInitiativeTie({ participant, tiedParticipants, newValue, inline: true });
+        }
         return;
       }
+      console.log('Calling onUpdateParticipantInitiative with', participant.battleId, newValue);
       onUpdateParticipantInitiative(participant.battleId, newValue);
     }
-  };
-
-  const handleResolveTie = (firstId) => {
-    // Find the participant to update
-    const allTied = [initiativeCollision.participant, ...initiativeCollision.tiedParticipants];
-    const selected = allTied.find(p => p.battleId === firstId);
-    const newInitiative = initiativeCollision.newValue + 1;
-    // Check if new initiative is still a tie
-    const otherParticipants = participants.filter(p => p.battleId !== selected.battleId);
-    const stillTied = otherParticipants.filter(p => p.initiative === newInitiative);
-    if (stillTied.length > 0) {
-      // Show the tie modal again for the new value
-      setInitiativeCollision({ participant: selected, tiedParticipants: stillTied, newValue: newInitiative });
-    } else {
-      if (onUpdateParticipantInitiative) {
-        onUpdateParticipantInitiative(selected.battleId, newInitiative);
-      }
-      setInitiativeCollision(null);
-    }
-  };
-
-  const handleCancelTie = () => {
-    setInitiativeCollision(null);
-  };
-
-  const handleAcceptInitiativeProposal = () => {
-    if (initiativeCollision && onUpdateParticipantInitiative) {
-      onUpdateParticipantInitiative(initiativeCollision.participant.battleId, initiativeCollision.newValue);
-    }
-    setInitiativeCollision(null);
-  };
-
-  const handleCancelInitiativeProposal = () => {
-    setInitiativeCollision(null);
   };
 
   const handleHpInputChange = (battleId, value) => {
@@ -183,11 +155,44 @@ function BattleTab({
     const value = Number(hpInputValues[participant.battleId]);
     if (!isNaN(value) && value !== 0) {
       if (onUpdateParticipantHP) {
+        console.log('Calling onUpdateParticipantHP for', participant.name, 'with new HP:', (Number(participant.hp) || 0) - value);
         onUpdateParticipantHP(participant.battleId, (Number(participant.hp) || 0) - value);
       }
       setHpInputValues(prev => ({ ...prev, [participant.battleId]: '' }));
     }
   };
+
+  // Add a helper to get the next valid turn (skipping dead creatures)
+  const getNextValidTurn = (sorted, currentIndex) => {
+    let nextIndex = (currentIndex + 1) % sorted.length;
+    let looped = false;
+    while (sorted[nextIndex].type === 'creature' && Number(sorted[nextIndex].hp) <= 0) {
+      nextIndex = (nextIndex + 1) % sorted.length;
+      if (nextIndex === currentIndex) {
+        looped = true;
+        break;
+      }
+    }
+    return looped ? null : nextIndex;
+  };
+
+  // Move player with 0 HP before highest-initiative creature
+  React.useEffect(() => {
+    const playersWithZeroHP = participants.filter(p => p.type === 'player' && Number(p.hp) === 0);
+    if (playersWithZeroHP.length > 0) {
+      const creatures = participants.filter(p => p.type === 'creature');
+      const highestCreature = creatures.reduce((max, c) => (c.initiative > (max?.initiative || -Infinity) ? c : max), null);
+      if (highestCreature) {
+        const others = participants.filter(p => p.battleId !== highestCreature.battleId && !(p.type === 'player' && Number(p.hp) === 0));
+        const reordered = [
+          ...others,
+          ...playersWithZeroHP,
+          highestCreature
+        ];
+        // setBattleParticipants(reordered); // Not needed, handled in App
+      }
+    }
+  }, [participants]);
 
   React.useEffect(() => {
     const handler = (e) => {
@@ -224,8 +229,8 @@ function BattleTab({
               </div>
               <div className="d-flex gap-2">
                 {!isBattleStarted ? (
-                  <Button 
-                    variant="primary" 
+                  <Button
+                    variant="primary"
                     onClick={handleStartBattle}
                     disabled={participants.length === 0}
                   >
@@ -233,36 +238,39 @@ function BattleTab({
                   </Button>
                 ) : (
                   <>
-                    <Button 
-                      variant="primary" 
+                    <Button
+                      variant="primary"
                       onClick={onFinishTurn}
                     >
                       Finish Turn <ArrowRight />
                     </Button>
-                    <Button 
-                      variant="danger" 
+                    <Button
+                      variant="danger"
                       onClick={handleEndBattleClick}
                     >
                       Finish Battle
                     </Button>
                   </>
                 )}
-                <Button 
-                  variant="outline-danger" 
-                  size="sm"
-                  onClick={() => setRemoveAllDialogOpen(true)}
-                >
-                  <Trash /> Remove All
-                </Button>
+                {!isBattleStarted && (
+                  <Button
+                    variant="outline-danger"
+                    size="sm"
+                    onClick={() => setRemoveAllDialogOpen(true)}
+                  >
+                    <Trash /> Remove All
+                  </Button>
+                )}
               </div>
             </Card.Header>
             <ListGroup variant="flush">
               {participants.map((participant) => (
-                <ListGroupItem 
+                <ListGroupItem
                   key={participant.battleId}
-                  className={`d-flex justify-content-between align-items-center ${
-                    currentTurn === participant.battleId ? 'highlighted-turn' : ''
-                  }`}
+                  className={`d-flex justify-content-between align-items-center ${currentTurn === participant.battleId ? 'highlighted-turn' : ''
+                    } ${Number(participant.hp) <= 0 ? 'hp-below-zero' : ''
+                    } ${currentTurn === participant.battleId && Number(participant.hp) <= 0 ? 'hp-below-zero-highlighted' : ''
+                    }`}
                 >
                   <div className="d-flex flex-column">
                     <div>
@@ -295,16 +303,17 @@ function BattleTab({
                     <div className="small text-muted mt-1">
                       {participant.type === 'creature' ? (
                         <>
-                          <div className="d-flex align-items-center" style={{gap: '0.5rem'}}>
+                          <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
                             HP: {participant.hp}
-                            <span className="ms-2">AC: {participant.ac}</span>
+                            <span className="ms-2">
+                              AC: {participant.ac}</span>
                             <input
                               type="number"
                               className="form-control d-inline-block ms-2"
                               style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
                               value={hpInputValues[participant.battleId] || ''}
                               onChange={e => handleHpInputChange(participant.battleId, e.target.value)}
-                              placeholder="-HP"
+                              placeholder="DMG"
                             />
                             <Button
                               variant="outline-danger"
@@ -406,7 +415,7 @@ function BattleTab({
                                     {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'regularSpell').map((atk, i) => (
                                       <li key={i} style={{ listStyleType: 'circle' }}>
                                         <span className="text-muted">[regular spell]</span>
-                                        {atk.attackName && <strong style={{marginLeft: 4}}>{atk.attackName}</strong>}
+                                        {atk.attackName && <strong style={{ marginLeft: 4 }}>{atk.attackName}</strong>}
                                         {(() => {
                                           let icon = null;
                                           if (atk.actions === '1') icon = action1;
@@ -438,26 +447,30 @@ function BattleTab({
                           )}
                         </>
                       ) : (
-                        <div>
-                          HP: {participant.hp || 0}
-                          <input
+                        <div className="d-flex align-items-center">
+                          <div>
+                            HP: {participant.hp || 0}
+                            <span className="ms-2">AC: {participant.ac || 0}</span>
+                          </div>
+                          <div className="d-flex align-items-center"><input
                             type="number"
                             className="form-control d-inline-block ms-2"
-                            style={{ width: 60, height: 24, fontSize: '0.9rem', padding: '2px 6px' }}
+                            style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
                             value={hpInputValues[participant.battleId] || ''}
                             onChange={e => handleHpInputChange(participant.battleId, e.target.value)}
-                            placeholder="-HP"
+                            placeholder="DMG"
                           />
-                          <Button
-                            variant="outline-danger"
-                            size="sm"
-                            className="ms-1"
-                            style={{ padding: '2px 8px', fontSize: '0.9rem' }}
-                            onClick={() => handleHpDeduct(participant)}
-                            disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
-                          >
-                            -
-                          </Button>
+                            <Button
+                              variant="outline-danger"
+                              size="sm"
+                              className="ms-1"
+                              style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', alignItems: 'center', justifyContent: 'center' }}
+                              onClick={() => handleHpDeduct(participant)}
+                              disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
+                            >
+                              -
+                            </Button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -547,7 +560,7 @@ function BattleTab({
                     <CreatureAttackForm
                       attacks={creatureToEdit.attacks || []}
                       onChange={attacks => setCreatureToEdit(prev => ({ ...prev, attacks }))}
-                      onAddAttack={type => setCreatureToEdit(prev => ({ ...prev, attacks: [...(prev.attacks || []), type === 'spell' ? { attackName: '', attackType: 'spell', tradition: [], actions: '1', targetOrArea: 'target', areaType: '', range: '' } : type === 'regularSpell' ? { attackName: '', attackType: 'regularSpell', actions: '1', range: '', targets: '', duration: '', description: '' } : { attackName: '', attackType: type, firstHitModifier: '', secondHitModifier: '', thirdHitModifier: '', damage: '' } ] }))}
+                      onAddAttack={type => setCreatureToEdit(prev => ({ ...prev, attacks: [...(prev.attacks || []), type === 'spell' ? { attackName: '', attackType: 'spell', tradition: [], actions: '1', targetOrArea: 'target', areaType: '', range: '' } : type === 'regularSpell' ? { attackName: '', attackType: 'regularSpell', actions: '1', range: '', targets: '', duration: '', description: '' } : { attackName: '', attackType: type, firstHitModifier: '', secondHitModifier: '', thirdHitModifier: '', damage: '' }] }))}
                       onRemoveAttack={index => setCreatureToEdit(prev => ({ ...prev, attacks: prev.attacks.filter((_, i) => i !== index) }))}
                     />
                   </div>
@@ -556,29 +569,6 @@ function BattleTab({
                     <Button variant="primary" type="submit">Save</Button>
                   </div>
                 </form>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Initiative collision modal */}
-      {initiativeCollision && (
-        <div className="modal show fade d-block" tabIndex="-1" role="dialog" style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog" role="document">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Initiative Collision</h5>
-                <button type="button" className="btn-close" onClick={handleCancelInitiativeProposal}></button>
-              </div>
-              <div className="modal-body">
-                <p>
-                  The initiative value you entered is already taken. Would you like to set <strong>{initiativeCollision.participant.name}</strong>'s initiative to <strong>{initiativeCollision.newValue}</strong> instead?
-                </p>
-              </div>
-              <div className="modal-footer">
-                <Button variant="secondary" onClick={handleCancelInitiativeProposal}>Cancel</Button>
-                <Button variant="primary" onClick={handleAcceptInitiativeProposal}>Accept</Button>
               </div>
             </div>
           </div>

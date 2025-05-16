@@ -351,9 +351,23 @@ function App() {
     handleEndBattle();
   };
 
+  // Helper to get the next valid turn (skipping dead creatures)
+  const getNextValidTurn = (sorted, currentIndex) => {
+    let nextIndex = (currentIndex + 1) % sorted.length;
+    let looped = false;
+    // Only skip creatures with HP <= 0, not players
+    while (sorted[nextIndex].type === 'creature' && Number(sorted[nextIndex].hp) <= 0) {
+      nextIndex = (nextIndex + 1) % sorted.length;
+      if (nextIndex === currentIndex) {
+        looped = true;
+        break;
+      }
+    }
+    return looped ? null : nextIndex;
+  };
+
   const handleFinishTurn = () => {
     if (!battleParticipants.length) return;
-
     // Sort participants by initiative (highest first)
     const sorted = [...battleParticipants].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
     const currentIndex = sorted.findIndex(p => p.battleId === currentTurn);
@@ -361,14 +375,19 @@ function App() {
       setCurrentTurn(sorted[0].battleId);
       return;
     }
-    const nextIndex = (currentIndex + 1) % sorted.length;
+    let nextIndex = getNextValidTurn(sorted, currentIndex);
+    if (nextIndex === null) {
+      setCurrentTurn(sorted[0].battleId);
+      setCurrentRound(prev => prev + 1);
+      setBattleParticipants(sorted);
+      return;
+    }
     const nextTurnId = sorted[nextIndex].battleId;
     setCurrentTurn(nextTurnId);
     // Only increment round when cycling back to the first participant
     if (nextIndex === 0) {
       setCurrentRound(prev => prev + 1);
     }
-    // Ensure participants stay sorted
     setBattleParticipants(sorted);
   };
 
@@ -394,7 +413,12 @@ function App() {
 
   const handleAddToBattle = (entity) => {
     let newName = entity.name;
-    if ((entity.type || (entity.hp ? 'creature' : 'player')) === 'creature') {
+    let type = entity.type;
+    if (!type) {
+      // If type is not set, infer from presence of hp
+      type = entity.hp ? 'creature' : 'player';
+    }
+    if (type === 'creature') {
       // Count how many creatures with the same base name are already in battle
       const baseName = entity.name.replace(/ \d+$/, '');
       const sameNameCount = battleParticipants.filter(
@@ -409,7 +433,7 @@ function App() {
       name: newName,
       battleId: Date.now(),
       initiative: null,
-      type: entity.type || (entity.hp ? 'creature' : 'player')
+      type: type // Ensure type is set correctly
     };
     setBattleParticipants(prev => [...prev, newParticipant]);
   };
@@ -440,6 +464,7 @@ function App() {
 
   // Update initiative and sort participants
   const handleUpdateParticipantInitiative = (battleId, newInitiative) => {
+    console.log('handleUpdateParticipantInitiative called for', battleId, 'with newInitiative:', newInitiative);
     // Find the participant being edited
     const participant = battleParticipants.find(p => p.battleId === battleId);
     // Find all other participants with the same initiative
@@ -460,13 +485,55 @@ function App() {
 
   // Update HP for a participant in battle
   const handleUpdateParticipantHP = (battleId, newHP) => {
-    setBattleParticipants(prev => prev.map(p => p.battleId === battleId ? { ...p, hp: newHP } : p));
+    console.log('handleUpdateParticipantHP called with', { battleId, newHP });
+    setBattleParticipants(prev => {
+      const updated = prev.map(p => {
+        console.log('Checking participant', p.name, p.battleId, p.type, p.hp);
+        if (p.battleId === battleId) {
+          console.log('Matched participant', p.name, 'type:', p.type, 'old HP:', p.hp, 'new HP:', newHP);
+          // If player and HP drops to 0 or below, boost initiative if needed
+          if (p.type === 'player' && Number(newHP) <= 0) {
+            const maxCreatureInit = Math.max(
+              ...prev.filter(c => c.type === 'creature').map(c => Number(c.initiative) || 0),
+              0
+            );
+            let newInitiative = Number(p.initiative) || 0;
+            if (newInitiative <= maxCreatureInit) {
+              newInitiative = maxCreatureInit + 1;
+              console.log(`Boosting player initiative:`, { name: p.name, oldInit: p.initiative, newInit: newInitiative });
+            }
+            return { ...p, hp: newHP, initiative: newInitiative };
+          }
+          return { ...p, hp: newHP };
+        }
+        return p;
+      });
+      // Sort by initiative after any updates
+      const sorted = [...updated].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
+      // If we're updating a player's HP to 0 or below, we need to ensure they're in the right position
+      const updatedPlayer = sorted.find(p => p.battleId === battleId);
+      if (updatedPlayer?.type === 'player' && Number(newHP) <= 0) {
+        // Find the highest creature initiative
+        const highestCreature = sorted.find(p => p.type === 'creature');
+        if (highestCreature && updatedPlayer.initiative <= highestCreature.initiative) {
+          // Move the player right after the highest creature
+          const withoutPlayer = sorted.filter(p => p.battleId !== battleId);
+          const creatureIndex = withoutPlayer.findIndex(p => p.battleId === highestCreature.battleId);
+          withoutPlayer.splice(creatureIndex + 1, 0, updatedPlayer);
+          return withoutPlayer;
+        }
+      }
+      return sorted;
+    });
   };
 
   // Update a participant in battle by battleId
   const handleUpdateBattleParticipant = (updatedParticipant) => {
     setBattleParticipants(prev => prev.map(p => p.battleId === updatedParticipant.battleId ? { ...p, ...updatedParticipant } : p));
   };
+
+  // Handler to set initiative tie state from children
+  const handleInitiativeTie = (tieState) => setInitiativeTie(tieState);
 
   return (
     <Container fluid className="mt-3">
@@ -501,6 +568,7 @@ function App() {
               onUpdateParticipantHP={handleUpdateParticipantHP}
               onUpdateBattleParticipant={handleUpdateBattleParticipant}
               initiativeTie={initiativeTie}
+              onInitiativeTie={handleInitiativeTie}
               onResolveInitiativeTie={handleResolveInitiativeTie}
             />
           </Tab.Pane>

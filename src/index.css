@@ -52,4 +52,21 @@ input[type=number]::-webkit-inner-spin-button {
 input[type=number] {
   /* For Firefox */
   -moz-user-select: text;
+}
+
+.hp-below-zero {
+  background-color: #ffdddd !important;
+  color: #b30000 !important;
+}
+
+.hp-below-zero-highlighted {
+  background-color: #ffb3b3 !important;
+  color: #b30000 !important;
+  border: 2px solid #ff6666 !important;
+  box-shadow: 0 0 8px #ff6666;
+}
+
+.hp-below-zero.highlighted-turn {
+  background-color: #ffcccc !important;
+  color: #b30000 !important;
 } 

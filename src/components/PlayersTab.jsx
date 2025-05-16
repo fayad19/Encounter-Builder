@@ -129,7 +129,7 @@ function PlayersTab({ players = [], onAddPlayer, onUpdatePlayer, onDeletePlayer,
                     <Button
                       variant="outline-primary"
                       size="sm"
-                      onClick={() => onAddToBattle(player)}
+                      onClick={() => onAddToBattle({ ...player, type: 'player' })}
                     >
                       <Plus />
                     </Button>
