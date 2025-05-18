@@ -1,3 +1,7 @@
+--v.0.1.8
+- Tweaked responsive ui for small displays
+- Added Free action selection to spells
+
 --v.0.1.7
 - Added temporary HP
 - Fixed bug with HP being more than MaxHP

@@ -200,6 +200,7 @@ function CreatureAttackForm({ attacks, onChange, onAddAttack, onRemoveAttack }) 
                           <option value="1">1</option>
                           <option value="2">2</option>
                           <option value="3">3</option>
+                          <option value="free">Free</option>
                         </Form.Select>
                       </Form.Group>
                     </Col>
