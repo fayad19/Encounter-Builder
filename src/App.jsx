@@ -1,11 +1,59 @@
-import React, { useState, useEffect } from 'react';
-import { Container, Nav, Tab, Button } from 'react-bootstrap';
+import React, { useState, useEffect, useRef } from 'react';
+import { Container, Nav, Tab, Button, Modal, Alert } from 'react-bootstrap';
 import CreaturesTab from './components/CreaturesTab';
 import BattleTab from './components/BattleTab';
 import PlayersTab from './components/PlayersTab';
 import InitiativeDialog from './components/InitiativeDialog';
+import fillip from './assets/fillip.mp3';
+import fillipBg from './assets/fillip.jpg';
 
 function App() {
+  const audioRef = useRef(null);
+  const [isMusicPlaying, setIsMusicPlaying] = useState(false);
+  const [showStopConfirmModal, setShowStopConfirmModal] = useState(false);
+  const [showFillipMessage, setShowFillipMessage] = useState(false);
+  const [battleTabStyle, setBattleTabStyle] = useState({});
+  const [showBattleContent, setShowBattleContent] = useState(true);
+
+  // Initialize audio on component mount
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = 0.3;
+      audioRef.current.loop = true;
+    }
+  }, []);
+
+  const toggleMusic = () => {
+    if (audioRef.current) {
+      if (isMusicPlaying) {
+        setShowStopConfirmModal(true);
+      } else {
+        audioRef.current.play().catch(error => {
+          console.log('Audio playback failed:', error);
+        });
+        setIsMusicPlaying(true);
+      }
+    }
+  };
+
+  const handleStopConfirm = () => {
+    setShowFillipMessage(true);
+    setBattleTabStyle({
+      backgroundImage: `url(${fillipBg})`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundAttachment: 'fixed',
+      minHeight: '100vh',
+      position: 'relative'
+    });
+    setShowBattleContent(false);
+    setShowStopConfirmModal(false);
+  };
+
+  const handleStopCancel = () => {
+    setShowStopConfirmModal(false);
+  };
+
   // Initialize state with localStorage values
   const [creatures, setCreatures] = useState(() => {
     try {
@@ -144,6 +192,9 @@ function App() {
 
   const handleTabChange = (key) => {
     setCurrentTab(key);
+    if (key !== 'battle') {
+      setShowBattleContent(true);
+    }
   };
 
   const handleAddCreature = (creature) => {
@@ -262,35 +313,39 @@ function App() {
   // Handler for resolving tie during start battle
   const handleResolveInitiativeTie = (firstId) => {
     if (!initiativeTie) return;
+    
     // Find the participant to update
     const allTied = [initiativeTie.participant, ...initiativeTie.tiedParticipants];
     const selected = allTied.find(p => p.battleId === firstId);
     if (!selected) return;
-    const newInitiative = initiativeTie.newValue + 1;
-    // Check if new initiative is still a tie
-    const otherParticipants = battleParticipants.filter(p => p.battleId !== selected.battleId);
-    const stillTied = otherParticipants.filter(p => p.initiative === newInitiative);
-    if (stillTied.length > 0) {
-      setInitiativeTie({ participant: selected, tiedParticipants: stillTied, newValue: newInitiative, inline: initiativeTie.inline });
-      setPendingInitiativeParticipant({ ...selected, initiative: newInitiative });
-      return;
-    }
+
+    // Get the other participant (the one not selected)
+    const otherParticipant = allTied.find(p => p.battleId !== firstId);
+    if (!otherParticipant) return;
+
     if (initiativeTie.inline) {
-      // Inline edit: update the selected participant's initiative
+      // Inline edit: update both participants' initiatives
       setBattleParticipants(prev => {
-        const updated = prev.map(p =>
-          p.battleId === selected.battleId ? { ...p, initiative: newInitiative } : p
-        );
+        const updated = prev.map(p => {
+          if (p.battleId === selected.battleId) {
+            return { ...p, initiative: initiativeTie.newValue + 1 };
+          }
+          if (p.battleId === otherParticipant.battleId) {
+            return { ...p, initiative: initiativeTie.newValue };
+          }
+          return p;
+        });
         return [...updated].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
       });
       setInitiativeTie(null);
       setPendingInitiativeParticipant(null);
       return;
     }
-    // No more tie, add participant (start battle flow)
-    const newParticipant = {
+
+    // Start battle flow: add both participants with different initiatives
+    const newSelectedParticipant = {
       ...selected,
-      initiative: newInitiative,
+      initiative: initiativeTie.newValue + 1,
       status: '',
       battleId: Date.now(),
       type: selected.type || 'creature',
@@ -298,26 +353,25 @@ function App() {
       id: selected.id,
       damageInput: ''
     };
+
+    const newOtherParticipant = {
+      ...otherParticipant,
+      initiative: initiativeTie.newValue,
+      status: '',
+      battleId: Date.now() + 1, // Ensure different battleId
+      type: otherParticipant.type || 'creature',
+      hp: otherParticipant.hp || 0,
+      id: otherParticipant.id,
+      damageInput: ''
+    };
+
     setBattleParticipants(prevParticipants => {
-      // Remove all tied participants with the same initiative value
-      const allTied = [initiativeTie.participant, ...initiativeTie.tiedParticipants];
+      // Remove any existing participants with the same initiative
       const filtered = prevParticipants.filter(
         p => !(p.initiative === initiativeTie.newValue && allTied.some(tied => tied.battleId === p.battleId))
       );
-      const updatedParticipants = [...filtered, newParticipant];
-      // If the selected participant is not the pending one, add the pending participant with original initiative
-      if (pendingInitiativeParticipant && selected.battleId !== pendingInitiativeParticipant.battleId) {
-        const pendingParticipant = {
-          ...pendingInitiativeParticipant,
-          status: '',
-          battleId: Date.now(),
-          type: pendingInitiativeParticipant.type || 'creature',
-          hp: pendingInitiativeParticipant.hp || 0,
-          id: pendingInitiativeParticipant.id,
-          damageInput: ''
-        };
-        updatedParticipants.push(pendingParticipant);
-      }
+      const updatedParticipants = [...filtered, newSelectedParticipant, newOtherParticipant];
+      
       if (remainingParticipants.length === 1) {
         const sorted = [...updatedParticipants].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
         if (sorted.length > 0) {
@@ -327,6 +381,7 @@ function App() {
       }
       return updatedParticipants;
     });
+
     // Move to next participant
     const nextParticipants = remainingParticipants.slice(1);
     setRemainingParticipants(nextParticipants);
@@ -539,6 +594,20 @@ function App() {
 
   return (
     <Container fluid className="mt-3">
+      <audio ref={audioRef} src={fillip} />
+      
+      {showFillipMessage && (
+        <Alert 
+          variant="danger" 
+          className="position-fixed top-0 start-50 translate-middle-x mt-3"
+          style={{ zIndex: 9999 }}
+          onClose={() => setShowFillipMessage(false)} 
+          dismissible
+        >
+          <Alert.Heading>ФИЛЛИПА НЕЛЬЗЯ ОСТАНОВИТЬ!</Alert.Heading>
+        </Alert>
+      )}
+
       <Tab.Container activeKey={currentTab} onSelect={handleTabChange}>
         <Nav variant="tabs" className="mb-3 d-flex justify-content-center">
           <Nav.Item>
@@ -553,26 +622,28 @@ function App() {
         </Nav>
 
         <Tab.Content>
-          <Tab.Pane eventKey="battle">
-            <BattleTab
-              participants={battleParticipants}
-              battleStarted={battleStarted}
-              currentTurn={currentTurn}
-              currentRound={currentRound}
-              onStartBattle={handleStartBattle}
-              onFinishTurn={handleFinishTurn}
-              onEndBattle={handleEndBattle}
-              onRemoveParticipant={handleRemoveParticipant}
-              onRemoveAllParticipants={handleRemoveAllParticipants}
-              onRemoveAllPlayers={handleRemoveAllPlayers}
-              onRemoveAllCreatures={handleRemoveAllCreatures}
-              onUpdateParticipantInitiative={handleUpdateParticipantInitiative}
-              onUpdateParticipantHP={handleUpdateParticipantHP}
-              onUpdateBattleParticipant={handleUpdateBattleParticipant}
-              initiativeTie={initiativeTie}
-              onInitiativeTie={handleInitiativeTie}
-              onResolveInitiativeTie={handleResolveInitiativeTie}
-            />
+          <Tab.Pane eventKey="battle" style={currentTab === 'battle' ? battleTabStyle : {}}>
+            {showBattleContent && (
+              <BattleTab
+                participants={battleParticipants}
+                battleStarted={battleStarted}
+                currentTurn={currentTurn}
+                currentRound={currentRound}
+                onStartBattle={handleStartBattle}
+                onFinishTurn={handleFinishTurn}
+                onEndBattle={handleEndBattle}
+                onRemoveParticipant={handleRemoveParticipant}
+                onRemoveAllParticipants={handleRemoveAllParticipants}
+                onRemoveAllPlayers={handleRemoveAllPlayers}
+                onRemoveAllCreatures={handleRemoveAllCreatures}
+                onUpdateParticipantInitiative={handleUpdateParticipantInitiative}
+                onUpdateParticipantHP={handleUpdateParticipantHP}
+                onUpdateBattleParticipant={handleUpdateBattleParticipant}
+                initiativeTie={initiativeTie}
+                onInitiativeTie={handleInitiativeTie}
+                onResolveInitiativeTie={handleResolveInitiativeTie}
+              />
+            )}
           </Tab.Pane>
           <Tab.Pane eventKey="creatures">
             <CreaturesTab
@@ -633,6 +704,33 @@ function App() {
           </div>
         </div>
       ) : null}
+
+      <Modal show={showStopConfirmModal} onHide={handleStopCancel} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Подтверждение</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          Вы уверены, что хотите остановить Филлипа?
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={handleStopCancel}>
+            Нет
+          </Button>
+          <Button variant="danger" onClick={handleStopConfirm}>
+            Да
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <div className="position-fixed bottom-0 start-50 translate-middle-x mb-3">
+        <Button 
+          variant={isMusicPlaying ? "success" : "outline-success"}
+          onClick={toggleMusic}
+          className="rounded-pill px-4"
+        >
+          {isMusicPlaying ? "🎵 Остановить Филлипа.." : "🎵 Сделай Красиво"}
+        </Button>
+      </div>
     </Container>
   );
 }

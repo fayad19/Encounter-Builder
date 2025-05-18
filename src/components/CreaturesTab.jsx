@@ -167,32 +167,16 @@ function CreaturesTab({
             </Card.Header>
             <Card.Body>
               <Form onSubmit={handleSubmit}>
-                <Row>
-                  <Col md={8}>
-                    <Form.Group className="mb-3">
-                      <Form.Label>Creature Name</Form.Label>
-                      <Form.Control
-                        type="text"
-                        name="name"
-                        value={newCreature.name}
-                        onChange={handleInputChange}
-                        placeholder="Enter creature name"
-                      />
-                    </Form.Group>
-                  </Col>
-                  <Col md={4}>
-                    <Form.Group className="mb-3">
-                      <Form.Label>Perception</Form.Label>
-                      <Form.Control
-                        type="number"
-                        name="perception"
-                        value={newCreature.perception}
-                        onChange={handleInputChange}
-                        placeholder="Enter Perception"
-                      />
-                    </Form.Group>
-                  </Col>
-                </Row>
+                <Form.Group className="mb-3">
+                  <Form.Label>Creature Name</Form.Label>
+                  <Form.Control
+                    type="text"
+                    name="name"
+                    value={newCreature.name}
+                    onChange={handleInputChange}
+                    placeholder="Enter creature name"
+                  />
+                </Form.Group>
                 
                 <Row>
                   <Col md={4}>

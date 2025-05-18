@@ -69,4 +69,61 @@ input[type=number] {
 .hp-below-zero.highlighted-turn {
   background-color: #ffcccc !important;
   color: #b30000 !important;
+}
+
+.condition-card {
+  transition: background-color 0.2s;
+  margin-bottom: 0.5rem;
+  border: 1px solid #dee2e6;
+  border-radius: 0.25rem;
+}
+
+.condition-card:hover {
+  background-color: #f8f9fa;
+}
+
+.condition-card:active {
+  cursor: grabbing;
+}
+
+.badge {
+  transition: background-color 0.2s;
+}
+
+.badge:hover {
+  background-color: #6c757d !important;
+}
+
+/* Style for the droppable area when dragging over */
+.droppable-active {
+  background-color: rgba(0, 123, 255, 0.1);
+  border: 2px dashed #007bff;
+}
+
+/* Ensure the conditions menu stays in view */
+.conditions-menu {
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+/* Style for condition badges */
+.condition-badge {
+  font-size: 0.875rem;
+  padding: 0.25rem 0.5rem;
+  margin: 0.125rem;
+  border-radius: 0.25rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.condition-badge .remove-icon {
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.condition-badge:hover .remove-icon {
+  opacity: 1;
 } 
