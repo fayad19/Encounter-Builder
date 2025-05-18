@@ -618,117 +618,133 @@ function App() {
   const sortedParticipants = [...battleParticipants].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
 
   return (
-    <Container fluid className="mt-3">
-      <audio ref={audioRef} src={fillip} />
-      
-      {showFillipMessage && (
-        <Alert 
-          variant="danger" 
-          className="position-fixed top-0 start-50 translate-middle-x mt-3"
-          style={{ zIndex: 9999 }}
-          onClose={() => setShowFillipMessage(false)} 
-          dismissible
-        >
-          <Alert.Heading>ФИЛЛИПА НЕЛЬЗЯ ОСТАНОВИТЬ!</Alert.Heading>
-        </Alert>
-      )}
+    <div className="d-flex flex-column min-vh-100">
+      <Container fluid className="mt-3 flex-grow-1">
+        <audio ref={audioRef} src={fillip} />
+        
+        {showFillipMessage && (
+          <Alert 
+            variant="danger" 
+            className="position-fixed top-0 start-50 translate-middle-x mt-3"
+            style={{ zIndex: 9999 }}
+            onClose={() => setShowFillipMessage(false)} 
+            dismissible
+          >
+            <Alert.Heading>ФИЛЛИПА НЕЛЬЗЯ ОСТАНОВИТЬ!</Alert.Heading>
+          </Alert>
+        )}
 
-      <Tab.Container activeKey={currentTab} onSelect={handleTabChange}>
-        <Nav variant="tabs" className="mb-3 d-flex justify-content-center">
-          <Nav.Item>
-            <Nav.Link eventKey="battle">Battle</Nav.Link>
-          </Nav.Item>
-          <Nav.Item>
-            <Nav.Link eventKey="creatures">Creatures</Nav.Link>
-          </Nav.Item>
-          <Nav.Item>
-            <Nav.Link eventKey="players">Players</Nav.Link>
-          </Nav.Item>
-        </Nav>
+        <Tab.Container activeKey={currentTab} onSelect={handleTabChange}>
+          <Nav variant="tabs" className="mb-3 d-flex justify-content-center">
+            <Nav.Item>
+              <Nav.Link eventKey="battle">Battle</Nav.Link>
+            </Nav.Item>
+            <Nav.Item>
+              <Nav.Link eventKey="creatures">Creatures</Nav.Link>
+            </Nav.Item>
+            <Nav.Item>
+              <Nav.Link eventKey="players">Players</Nav.Link>
+            </Nav.Item>
+          </Nav>
 
-        <Tab.Content>
-          <Tab.Pane eventKey="battle" style={currentTab === 'battle' ? battleTabStyle : {}}>
-            {showBattleContent && (
-              <BattleTab
-                participants={sortedParticipants}
-                battleStarted={battleStarted}
-                currentTurn={currentTurn}
-                currentRound={currentRound}
-                onStartBattle={handleStartBattle}
-                onFinishTurn={handleFinishTurn}
-                onEndBattle={handleEndBattle}
-                onRemoveParticipant={handleRemoveParticipant}
-                onRemoveAllParticipants={handleRemoveAllParticipants}
-                onRemoveAllPlayers={handleRemoveAllPlayers}
-                onRemoveAllCreatures={handleRemoveAllCreatures}
-                onUpdateParticipantInitiative={handleUpdateParticipantInitiative}
-                onUpdateParticipantHP={handleUpdateParticipantHP}
-                onUpdateBattleParticipant={handleUpdateBattleParticipant}
-                initiativeTie={initiativeTie}
-                onInitiativeTie={handleInitiativeTie}
-                onResolveInitiativeTie={handleResolveInitiativeTie}
+          <Tab.Content>
+            <Tab.Pane eventKey="battle" style={currentTab === 'battle' ? battleTabStyle : {}}>
+              {showBattleContent && (
+                <BattleTab
+                  participants={sortedParticipants}
+                  battleStarted={battleStarted}
+                  currentTurn={currentTurn}
+                  currentRound={currentRound}
+                  onStartBattle={handleStartBattle}
+                  onFinishTurn={handleFinishTurn}
+                  onEndBattle={handleEndBattle}
+                  onRemoveParticipant={handleRemoveParticipant}
+                  onRemoveAllParticipants={handleRemoveAllParticipants}
+                  onRemoveAllPlayers={handleRemoveAllPlayers}
+                  onRemoveAllCreatures={handleRemoveAllCreatures}
+                  onUpdateParticipantInitiative={handleUpdateParticipantInitiative}
+                  onUpdateParticipantHP={handleUpdateParticipantHP}
+                  onUpdateBattleParticipant={handleUpdateBattleParticipant}
+                  initiativeTie={initiativeTie}
+                  onInitiativeTie={handleInitiativeTie}
+                  onResolveInitiativeTie={handleResolveInitiativeTie}
+                />
+              )}
+            </Tab.Pane>
+            <Tab.Pane eventKey="creatures">
+              <CreaturesTab
+                savedCreatures={creatures}
+                onAddCreature={handleAddCreature}
+                onUpdateCreature={handleUpdateCreature}
+                onDeleteCreature={handleDeleteCreature}
+                onAddToBattle={handleAddToBattle}
               />
-            )}
-          </Tab.Pane>
-          <Tab.Pane eventKey="creatures">
-            <CreaturesTab
-              savedCreatures={creatures}
-              onAddCreature={handleAddCreature}
-              onUpdateCreature={handleUpdateCreature}
-              onDeleteCreature={handleDeleteCreature}
-              onAddToBattle={handleAddToBattle}
-            />
-          </Tab.Pane>
-          <Tab.Pane eventKey="players">
-            <PlayersTab
-              players={players}
-              onAddPlayer={handleAddPlayer}
-              onUpdatePlayer={handleUpdatePlayer}
-              onDeletePlayer={handleDeletePlayer}
-              onAddToBattle={handleAddToBattle}
-            />
-          </Tab.Pane>
-        </Tab.Content>
-      </Tab.Container>
-      
-      <InitiativeDialog
-        open={initiativeDialogOpen}
-        onClose={handleInitiativeClose}
-        onConfirm={handleInitiativeConfirm}
-        onSkip={handleInitiativeSkip}
-        participant={remainingParticipants[0]}
-      />
+            </Tab.Pane>
+            <Tab.Pane eventKey="players">
+              <PlayersTab
+                players={players}
+                onAddPlayer={handleAddPlayer}
+                onUpdatePlayer={handleUpdatePlayer}
+                onDeletePlayer={handleDeletePlayer}
+                onAddToBattle={handleAddToBattle}
+              />
+            </Tab.Pane>
+          </Tab.Content>
+        </Tab.Container>
+        
+        <InitiativeDialog
+          open={initiativeDialogOpen}
+          onClose={handleInitiativeClose}
+          onConfirm={handleInitiativeConfirm}
+          onSkip={handleInitiativeSkip}
+          participant={remainingParticipants[0]}
+        />
 
-      {(initiativeTie && handleResolveInitiativeTie && initiativeTie.participant && initiativeTie.tiedParticipants) ? (
-        <div className="modal show fade d-block" tabIndex="-1" role="dialog" style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog" role="document">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Initiative Tie</h5>
-                <button type="button" className="btn-close" onClick={() => handleResolveInitiativeTie(null)}></button>
-              </div>
-              <div className="modal-body">
-                <p>
-                  Multiple participants have initiative <strong>{initiativeTie.newValue}</strong>.<br />
-                  Who should go first?
-                </p>
-                <ul>
-                  {[initiativeTie.participant, ...initiativeTie.tiedParticipants].map(p => (
-                    <li key={p.battleId}>
-                      <Button variant="outline-primary" onClick={() => handleResolveInitiativeTie(p.battleId)}>
-                        {p.name}
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="modal-footer">
-                <Button variant="secondary" onClick={() => handleResolveInitiativeTie(null)}>Cancel</Button>
+        {(initiativeTie && handleResolveInitiativeTie && initiativeTie.participant && initiativeTie.tiedParticipants) ? (
+          <div className="modal show fade d-block" tabIndex="-1" role="dialog" style={{ background: 'rgba(0,0,0,0.5)' }}>
+            <div className="modal-dialog" role="document">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Initiative Tie</h5>
+                  <button type="button" className="btn-close" onClick={() => handleResolveInitiativeTie(null)}></button>
+                </div>
+                <div className="modal-body">
+                  <p>
+                    Multiple participants have initiative <strong>{initiativeTie.newValue}</strong>.<br />
+                    Who should go first?
+                  </p>
+                  <ul>
+                    {[initiativeTie.participant, ...initiativeTie.tiedParticipants].map(p => (
+                      <li key={p.battleId}>
+                        <Button variant="outline-primary" onClick={() => handleResolveInitiativeTie(p.battleId)}>
+                          {p.name}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="modal-footer">
+                  <Button variant="secondary" onClick={() => handleResolveInitiativeTie(null)}>Cancel</Button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </Container>
+
+      <footer className="bg-light py-3 mt-auto border-top">
+        <Container fluid>
+          <div className="d-flex justify-content-center">
+            <Button 
+              variant={isMusicPlaying ? "success" : "outline-success"}
+              onClick={toggleMusic}
+              className="rounded-pill px-4"
+            >
+              {isMusicPlaying ? "🎵 Остановить Филлипа.." : "🎵 Сделай Красиво"}
+            </Button>
+          </div>
+        </Container>
+      </footer>
 
       <Modal show={showStopConfirmModal} onHide={handleStopCancel} centered>
         <Modal.Header closeButton>
@@ -746,17 +762,7 @@ function App() {
           </Button>
         </Modal.Footer>
       </Modal>
-
-      <div className="position-fixed bottom-0 start-50 translate-middle-x mb-3">
-        <Button 
-          variant={isMusicPlaying ? "success" : "outline-success"}
-          onClick={toggleMusic}
-          className="rounded-pill px-4"
-        >
-          {isMusicPlaying ? "🎵 Остановить Филлипа.." : "🎵 Сделай Красиво"}
-        </Button>
-      </div>
-    </Container>
+    </div>
   );
 }
 

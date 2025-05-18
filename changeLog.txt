@@ -1,5 +1,6 @@
 --v.0.1.6
 - Added Conditions Menu button which will hide conditions menu and add a button to each participant of battle
+- Moved Music button to footer
 
 --v.0.1.5
 - fixed level and perception saving into the same variable
