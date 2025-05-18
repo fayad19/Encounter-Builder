@@ -190,6 +190,19 @@ function BattleTab({
     }
   };
 
+  const handleHpHeal = (participant) => {
+    const value = Number(hpInputValues[participant.battleId]);
+    if (!isNaN(value) && value !== 0) {
+      if (onUpdateParticipantHP) {
+        const currentHp = Number(participant.hp) || 0;
+        const maxHp = Number(participant.maxHp) || currentHp;
+        const newHp = Math.min(maxHp, currentHp + value);
+        onUpdateParticipantHP(participant.battleId, newHp);
+      }
+      setHpInputValues(prev => ({ ...prev, [participant.battleId]: '' }));
+    }
+  };
+
   const handleTempHpAdd = (participant) => {
     const value = Number(tempHpInputValues[participant.battleId]);
     if (!isNaN(value) && value !== 0) {
@@ -1000,11 +1013,21 @@ function BattleTab({
                                       <input
                                         type="number"
                                         className="form-control d-inline-block"
-                                        style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
+                                        style={{ width: 50, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
                                         value={hpInputValues[participant.battleId] || ''}
                                         onChange={e => handleHpInputChange(participant.battleId, e.target.value)}
-                                        placeholder="DMG"
+                                        placeholder="HP"
                                       />
+                                      <Button
+                                        variant="outline-success"
+                                        size="sm"
+                                        className="ms-1"
+                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        onClick={() => handleHpHeal(participant)}
+                                        disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
+                                      >
+                                        +
+                                      </Button>
                                       <Button
                                         variant="outline-danger"
                                         size="sm"
@@ -1206,8 +1229,18 @@ function BattleTab({
                                         style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
                                         value={hpInputValues[participant.battleId] || ''}
                                         onChange={e => handleHpInputChange(participant.battleId, e.target.value)}
-                                        placeholder="DMG"
+                                        placeholder="Damage/Heal"
                                       />
+                                      <Button
+                                        variant="outline-success"
+                                        size="sm"
+                                        className="ms-1"
+                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        onClick={() => handleHpHeal(participant)}
+                                        disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
+                                      >
+                                        +
+                                      </Button>
                                       <Button
                                         variant="outline-danger"
                                         size="sm"

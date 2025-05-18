@@ -1,6 +1,7 @@
 --v.0.1.7
 - Added temporary HP
 - Fixed bug with HP being more than MaxHP
+- Added Heal Button
 
 --v.0.1.6
 - Added Conditions Menu button which will hide conditions menu and add a button to each participant of battle
