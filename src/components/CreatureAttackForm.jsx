@@ -354,6 +354,16 @@ function MonsterAttackForm({ attacks, onChange, onAddAttack, onRemoveAttack }) {
                       </Col>
                     </Row>
                   )}
+                  {/* Add Damage field for spells */}
+                  <Form.Group className="mb-2">
+                    <Form.Label>Damage</Form.Label>
+                    <Form.Control
+                      type="text"
+                      value={attack.damage || ''}
+                      onChange={e => handleAttackChange(index, 'damage', e.target.value)}
+                      placeholder="Enter damage (e.g. 4d6+2)"
+                    />
+                  </Form.Group>
                 </>
               )}
               {/* Regular Spell Fields */}

@@ -36,7 +36,8 @@ function CreaturesTab({
     }));
   };
 
-  // const handleAttackChange = (index, field, value) => {
+  const handleAddAttack = (type) => {
+    // const handleAttackChange = (index, field, value) => {
   //   const updatedAttacks = [...newCreature.attacks];
   //   updatedAttacks[index] = {
   //     ...updatedAttacks[index],
@@ -48,8 +49,7 @@ function CreaturesTab({
   //   }));
   // };
 
-  const handleAddAttack = (type) => {
-    if (type === 'spell') {
+  if (type === 'spell') {
       setNewCreature(prev => ({
         ...prev,
         attacks: [
@@ -117,11 +117,16 @@ function CreaturesTab({
 
   const handleEditClick = (creature) => {
     setNewCreature({
-      name: creature.name,
-      hp: creature.hp,
-      ac: creature.ac,
-      //initiative: creature.initiative,
-      penalty: creature.penalty,
+      name: creature.name || '',
+      hp: creature.hp || '',
+      ac: creature.ac || '',
+      perception: creature.perception || '',
+      fortitude: creature.fortitude || '',
+      reflex: creature.reflex || '',
+      will: creature.will || '',
+      level: creature.level || '',
+      dc: creature.dc || '',
+      penalty: creature.penalty || '',
       attacks: creature.attacks || []
     });
     setEditingCreature(creature);
@@ -167,16 +172,45 @@ function CreaturesTab({
             </Card.Header>
             <Card.Body>
               <Form onSubmit={handleSubmit}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Creature Name</Form.Label>
-                  <Form.Control
-                    type="text"
-                    name="name"
-                    value={newCreature.name}
-                    onChange={handleInputChange}
-                    placeholder="Enter creature name"
-                  />
-                </Form.Group>
+                {/* Creature Name and Perception in one row */}
+                <Row>
+                  <Col md={8}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Creature Name</Form.Label>
+                      <Form.Control
+                        type="text"
+                        name="name"
+                        value={newCreature.name}
+                        onChange={handleInputChange}
+                        placeholder="Enter creature name"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={2}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Perception</Form.Label>
+                      <Form.Control
+                        type="number"
+                        name="perception"
+                        value={newCreature.perception}
+                        onChange={handleInputChange}
+                        placeholder="Perception"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={2}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Level</Form.Label>
+                      <Form.Control
+                        type="number"
+                        name="level"
+                        value={newCreature.perception}
+                        onChange={handleInputChange}
+                        placeholder="Level"
+                      />
+                    </Form.Group>
+                  </Col>
+                </Row>
                 
                 <Row>
                   <Col md={4}>

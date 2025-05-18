@@ -133,6 +133,12 @@ function App() {
   const [initiativeTie, setInitiativeTie] = useState(null);
   const [pendingInitiativeParticipant, setPendingInitiativeParticipant] = useState(null);
 
+  // Add state for current initiative value
+  const [currentInitiativeValue, setCurrentInitiativeValue] = useState(null);
+
+  // Add state for last added initiative
+  const [lastAddedInitiative, setLastAddedInitiative] = useState(null);
+
   // Save to localStorage whenever state changes
   useEffect(() => {
     try {
@@ -271,15 +277,7 @@ function App() {
   const handleInitiativeConfirm = (initiative) => {
     const currentParticipant = remainingParticipants[0];
     const newInitiative = Number(initiative);
-    // Check for tie
-    const tiedParticipants = battleParticipants.filter(p => p.initiative === newInitiative);
-    if (tiedParticipants.length > 0) {
-      setInitiativeTie({ participant: currentParticipant, tiedParticipants, newValue: newInitiative });
-      setPendingInitiativeParticipant({ ...currentParticipant, initiative: newInitiative });
-      setInitiativeDialogOpen(false);
-      return;
-    }
-    // No tie, proceed as before
+    // Always add the participant and set lastAddedInitiative
     const newParticipant = {
       ...currentParticipant,
       initiative: newInitiative,
@@ -288,10 +286,10 @@ function App() {
       type: currentParticipant.type || 'creature',
       hp: currentParticipant.hp || 0,
       id: currentParticipant.id,
-      damageInput: ''
+      damageInput: '',
+      maxHp: (currentParticipant.maxHp !== undefined && currentParticipant.maxHp !== '' && currentParticipant.maxHp !== null) ? Number(currentParticipant.maxHp) : (currentParticipant.hp || 0)
     };
     setBattleParticipants(prevParticipants => {
-      // Always just add the new participant; tie resolution is handled elsewhere
       const updatedParticipants = [...prevParticipants, newParticipant];
       if (remainingParticipants.length === 1) {
         const sorted = [...updatedParticipants].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
@@ -302,29 +300,24 @@ function App() {
       }
       return updatedParticipants;
     });
-    // Move to next participant
-    const nextParticipants = remainingParticipants.slice(1);
-    setRemainingParticipants(nextParticipants);
-    if (nextParticipants.length === 0) {
+    setLastAddedInitiative(newInitiative);
+    // Only close dialog if this was the last participant
+    if (remainingParticipants.length === 1) {
       setInitiativeDialogOpen(false);
     }
+    // Do not advance to next participant here; let useEffect handle it after tie check
   };
 
-  // Handler for resolving tie during start battle
   const handleResolveInitiativeTie = (firstId) => {
     if (!initiativeTie) return;
-    
     // Find the participant to update
     const allTied = [initiativeTie.participant, ...initiativeTie.tiedParticipants];
     const selected = allTied.find(p => p.battleId === firstId);
     if (!selected) return;
-
     // Get the other participant (the one not selected)
     const otherParticipant = allTied.find(p => p.battleId !== firstId);
     if (!otherParticipant) return;
-
     if (initiativeTie.inline) {
-      // Inline edit: update both participants' initiatives
       setBattleParticipants(prev => {
         const updated = prev.map(p => {
           if (p.battleId === selected.battleId) {
@@ -335,13 +328,21 @@ function App() {
           }
           return p;
         });
+        // After updating, check for ties for both values
+        const tieCheck = (val) => updated.filter(p => p.initiative === val);
+        if (tieCheck(initiativeTie.newValue).length > 1) {
+          setLastAddedInitiative(initiativeTie.newValue);
+        } else if (tieCheck(initiativeTie.newValue + 1).length > 1) {
+          setLastAddedInitiative(initiativeTie.newValue + 1);
+        } else {
+          setLastAddedInitiative(null);
+        }
         return [...updated].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
       });
       setInitiativeTie(null);
       setPendingInitiativeParticipant(null);
       return;
     }
-
     // Start battle flow: add both participants with different initiatives
     const newSelectedParticipant = {
       ...selected,
@@ -351,9 +352,9 @@ function App() {
       type: selected.type || 'creature',
       hp: selected.hp || 0,
       id: selected.id,
-      damageInput: ''
+      damageInput: '',
+      maxHp: (selected.maxHp !== undefined && selected.maxHp !== '' && selected.maxHp !== null) ? Number(selected.maxHp) : (selected.hp || 0)
     };
-
     const newOtherParticipant = {
       ...otherParticipant,
       initiative: initiativeTie.newValue,
@@ -362,34 +363,29 @@ function App() {
       type: otherParticipant.type || 'creature',
       hp: otherParticipant.hp || 0,
       id: otherParticipant.id,
-      damageInput: ''
+      damageInput: '',
+      maxHp: (otherParticipant.maxHp !== undefined && otherParticipant.maxHp !== '' && otherParticipant.maxHp !== null) ? Number(otherParticipant.maxHp) : (otherParticipant.hp || 0)
     };
-
     setBattleParticipants(prevParticipants => {
       // Remove any existing participants with the same initiative
       const filtered = prevParticipants.filter(
         p => !(p.initiative === initiativeTie.newValue && allTied.some(tied => tied.battleId === p.battleId))
       );
       const updatedParticipants = [...filtered, newSelectedParticipant, newOtherParticipant];
-      
-      if (remainingParticipants.length === 1) {
-        const sorted = [...updatedParticipants].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
-        if (sorted.length > 0) {
-          setCurrentTurn(sorted[0].battleId);
-        }
-        return sorted;
+      // After updating, check for ties for both values
+      const tieCheck = (val) => updatedParticipants.filter(p => p.initiative === val);
+      if (tieCheck(initiativeTie.newValue).length > 1) {
+        setLastAddedInitiative(initiativeTie.newValue);
+      } else if (tieCheck(initiativeTie.newValue + 1).length > 1) {
+        setLastAddedInitiative(initiativeTie.newValue + 1);
+      } else {
+        setLastAddedInitiative(null);
       }
       return updatedParticipants;
     });
-
-    // Move to next participant
-    const nextParticipants = remainingParticipants.slice(1);
-    setRemainingParticipants(nextParticipants);
-    if (nextParticipants.length === 0) {
-      setInitiativeDialogOpen(false);
-    }
     setInitiativeTie(null);
     setPendingInitiativeParticipant(null);
+    // Do not advance to next participant here; let useEffect handle it after tie check
   };
 
   const handleInitiativeSkip = () => {
@@ -488,7 +484,9 @@ function App() {
       name: newName,
       battleId: Date.now(),
       initiative: null,
-      type: type // Ensure type is set correctly
+      type: type, // Ensure type is set correctly
+      maxHp: (entity.maxHp !== undefined && entity.maxHp !== '' && entity.maxHp !== null) ? Number(entity.maxHp) : (entity.hp || 0), // Ensure maxHp is set if not present
+      hp: (entity.hp !== undefined && entity.hp !== '' && entity.hp !== null) ? Number(entity.hp) : ((entity.maxHp !== undefined && entity.maxHp !== '' && entity.maxHp !== null) ? Number(entity.maxHp) : 0)
     };
     setBattleParticipants(prev => [...prev, newParticipant]);
   };
@@ -545,34 +543,23 @@ function App() {
     const clampedHP = Math.max(0, Number(newHP));
     setBattleParticipants(prev => {
       const updated = prev.map(p => {
-        console.log('Checking participant', p.name, p.battleId, p.type, p.hp);
         if (p.battleId === battleId) {
-          console.log('Matched participant', p.name, 'type:', p.type, 'old HP:', p.hp, 'new HP:', clampedHP);
-          // If player and HP drops to 0 or below, boost initiative if needed
-          if (p.type === 'player' && clampedHP === 0) {
-            const maxCreatureInit = Math.max(
-              ...prev.filter(c => c.type === 'creature').map(c => Number(c.initiative) || 0),
-              0
-            );
-            let newInitiative = Number(p.initiative) || 0;
-            if (newInitiative <= maxCreatureInit) {
-              newInitiative = maxCreatureInit + 1;
-              console.log(`Boosting player initiative:`, { name: p.name, oldInit: p.initiative, newInit: newInitiative });
-            }
-            return { ...p, hp: clampedHP, initiative: newInitiative };
-          }
+          // Only update hp, do not touch maxHp
           return { ...p, hp: clampedHP };
         }
         return p;
       });
       // Sort by initiative after any updates
       const sorted = [...updated].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
-      // If we're updating a player's HP to 0, we need to ensure they're in the right position
+      // If we're updating a player's HP to 0, we need to ensure they're in the right position and update their initiative
       const updatedPlayer = sorted.find(p => p.battleId === battleId);
       if (updatedPlayer?.type === 'player' && clampedHP === 0) {
         // Find the highest creature initiative
         const highestCreature = sorted.find(p => p.type === 'creature');
-        if (highestCreature && updatedPlayer.initiative <= highestCreature.initiative) {
+        if (highestCreature) {
+          // Update player's initiative to highest creature initiative + 1
+          const newInitiative = (highestCreature.initiative || 0) + 1;
+          updatedPlayer.initiative = newInitiative;
           // Move the player right after the highest creature
           const withoutPlayer = sorted.filter(p => p.battleId !== battleId);
           const creatureIndex = withoutPlayer.findIndex(p => p.battleId === highestCreature.battleId);
@@ -591,6 +578,44 @@ function App() {
 
   // Handler to set initiative tie state from children
   const handleInitiativeTie = (tieState) => setInitiativeTie(tieState);
+
+  useEffect(() => {
+    if (lastAddedInitiative === null) return;
+    // Only check for ties if we're in the process of entering initiatives
+    const ties = battleParticipants.filter(p => p.initiative === lastAddedInitiative);
+    if (ties.length > 1) {
+      setInitiativeTie({ participant: ties[0], tiedParticipants: ties.slice(1), newValue: lastAddedInitiative });
+      setPendingInitiativeParticipant(null);
+      return;
+    }
+    // If no tie, move to next participant
+    const nextParticipants = remainingParticipants.slice(1);
+    setRemainingParticipants(nextParticipants);
+    if (nextParticipants.length > 0) {
+      setInitiativeDialogOpen(true);
+    } else {
+      // Sort participants by initiative (descending) after all are entered
+      setBattleParticipants(prev => [...prev].sort((a, b) => (b.initiative || 0) - (a.initiative || 0)));
+      setInitiativeDialogOpen(false);
+    }
+    setLastAddedInitiative(null); // Reset after advancing
+  }, [battleParticipants, lastAddedInitiative, remainingParticipants]);
+
+  useEffect(() => {
+    // Only sort if all participants have an initiative and there are no ties or dialogs open
+    const allHaveInitiative = battleParticipants.length > 0 && battleParticipants.every(p => p.initiative !== null && p.initiative !== undefined);
+    if (
+      allHaveInitiative &&
+      !initiativeTie &&
+      !initiativeDialogOpen &&
+      remainingParticipants.length === 0
+    ) {
+      setBattleParticipants(prev => [...prev].sort((a, b) => (b.initiative || 0) - (a.initiative || 0)));
+    }
+  }, [battleParticipants, initiativeTie, initiativeDialogOpen, remainingParticipants]);
+
+  // Before rendering BattleTab, sort participants by initiative (descending)
+  const sortedParticipants = [...battleParticipants].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
 
   return (
     <Container fluid className="mt-3">
@@ -625,7 +650,7 @@ function App() {
           <Tab.Pane eventKey="battle" style={currentTab === 'battle' ? battleTabStyle : {}}>
             {showBattleContent && (
               <BattleTab
-                participants={battleParticipants}
+                participants={sortedParticipants}
                 battleStarted={battleStarted}
                 currentTurn={currentTurn}
                 currentRound={currentRound}

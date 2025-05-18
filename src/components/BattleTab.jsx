@@ -1,5 +1,5 @@
 import React, { useState, StrictMode } from 'react';
-import { Container, Row, Col, Card, Button, ListGroup, ListGroupItem, Badge } from 'react-bootstrap';
+import { Container, Row, Col, Card, Button, ListGroup, ListGroupItem, Badge, Modal } from 'react-bootstrap';
 import { ArrowRight, Trash, Pencil, Plus, X } from 'react-bootstrap-icons';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import InitiativeDialog from './InitiativeDialog';
@@ -9,6 +9,28 @@ import action1 from '../assets/action-1.png';
 import action2 from '../assets/action-2.png';
 import action3 from '../assets/action-3.png';
 import CreatureAttackForm from './CreatureAttackForm';
+
+// Add PersistentDamageDialog component
+function PersistentDamageDialog({ show, onHide, onConfirm, onCancel, damageType, damageValue }) {
+  return (
+    <Modal show={show} onHide={onHide} centered>
+      <Modal.Header closeButton>
+        <Modal.Title>Persistent Damage Check</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <p>Did {damageType} persistent damage ({damageValue} damage) end?</p>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={onCancel}>
+          No (Persists)
+        </Button>
+        <Button variant="primary" onClick={onConfirm}>
+          Yes (Remove)
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+}
 
 function BattleTab({
   participants = [],
@@ -38,6 +60,12 @@ function BattleTab({
   const [editingInitiativeId, setEditingInitiativeId] = useState(null);
   const [initiativeInputValue, setInitiativeInputValue] = useState('');
   const [hpInputValues, setHpInputValues] = useState({});
+  const [persistentDamageDialog, setPersistentDamageDialog] = useState({
+    show: false,
+    participantId: null,
+    damageType: null,
+    damageValue: null
+  });
 
   const handleStartBattle = () => {
     if (participants.length > 0) {
@@ -143,8 +171,9 @@ function BattleTab({
     const value = Number(hpInputValues[participant.battleId]);
     if (!isNaN(value) && value !== 0) {
       if (onUpdateParticipantHP) {
-        console.log('Calling onUpdateParticipantHP for', participant.name, 'with new HP:', (Number(participant.hp) || 0) - value);
-        onUpdateParticipantHP(participant.battleId, (Number(participant.hp) || 0) - value);
+        // Deduct from current HP only, do not change maxHp
+        const newHp = Math.max(0, (Number(participant.hp) || 0) - value);
+        onUpdateParticipantHP(participant.battleId, newHp);
       }
       setHpInputValues(prev => ({ ...prev, [participant.battleId]: '' }));
     }
@@ -152,34 +181,34 @@ function BattleTab({
 
   const handleDragEnd = (result) => {
     if (!result.destination) return;
-    
+
     const conditionId = result.draggableId;
     const targetParticipantId = String(result.destination.droppableId);
-    
-    console.log('Drag end:', { 
-      conditionId, 
-      targetParticipantId, 
+
+    console.log('Drag end:', {
+      conditionId,
+      targetParticipantId,
       destination: result.destination,
       draggableId: result.draggableId,
       source: result.source
     });
-    
+
     if (targetParticipantId && conditionId) {
       handleConditionDrop(targetParticipantId, conditionId);
     }
   };
 
   const handleConditionDrop = (participantId, conditionId) => {
-    console.log('Condition drop:', { 
-      participantId, 
+    console.log('Condition drop:', {
+      participantId,
       conditionId,
       participants: participants.map(p => ({ id: p.battleId, name: p.name, type: typeof p.battleId }))
     });
-    
+
     // Convert participantId to number for comparison
     const numericParticipantId = Number(participantId);
     const participant = participants.find(p => Number(p.battleId) === numericParticipantId);
-    
+
     if (!participant) {
       console.log('Participant not found:', participantId, 'Available participants:', participants.map(p => ({ id: p.battleId, type: typeof p.battleId })));
       return;
@@ -193,6 +222,46 @@ function BattleTab({
     }
 
     console.log('Found condition:', condition);
+
+    // Special handling for persistent damage
+    if (conditionId === 'persistentDamage') {
+      // Prompt for damage type and value
+      const damageType = prompt('Enter damage type (e.g., fire, bleeding):');
+      if (!damageType) return; // User cancelled
+
+      const damageValue = prompt('Enter damage value:');
+      if (!damageValue || isNaN(Number(damageValue))) {
+        alert('Please enter a valid number for damage value');
+        return;
+      }
+
+      // Get current instances or initialize empty array
+      const currentInstances = participant.conditions?.persistentDamage?.instances || [];
+      
+      // Update participant with new condition instance
+      const updatedParticipant = {
+        ...participant,
+        conditions: {
+          ...participant.conditions,
+          persistentDamage: {
+            stacks: 1, // Keep track of total instances
+            instances: [
+              ...currentInstances,
+              { damageType, damageValue: Number(damageValue) }
+            ]
+          }
+        }
+      };
+
+      console.log('Updating participant with persistent damage:', {
+        id: updatedParticipant.battleId,
+        name: updatedParticipant.name,
+        conditions: updatedParticipant.conditions
+      });
+
+      onUpdateBattleParticipant(updatedParticipant);
+      return;
+    }
 
     // Get current stacks of this condition
     const currentStacks = (participant.conditions?.[conditionId]?.stacks || 0);
@@ -219,20 +288,136 @@ function BattleTab({
       conditions: updatedParticipant.conditions
     });
 
-    // Apply condition effects
+    // Helper function to modify damage expression
+    const modifyDamageExpression = (damage, modifier) => {
+      if (!damage) return damage;
+
+      // Match patterns like "4d4+4" or "2d6+3" or "1d8"
+      const match = damage.match(/^(\d+)d(\d+)(?:\+(\d+))?$/);
+      if (!match) return damage;
+
+      const [, dice, sides, bonus] = match;
+      const newBonus = bonus ? Number(bonus) + modifier : modifier;
+
+      // If the bonus becomes 0 or negative, just return the dice part
+      if (newBonus <= 0) {
+        return `${dice}d${sides}`;
+      }
+
+      return `${dice}d${sides}+${newBonus}`;
+    };
+
+    // Apply all condition effects
     Object.entries(condition.effects).forEach(([stat, value]) => {
-      if (stat === 'ac') {
-        updatedParticipant.ac = Math.max(0, (Number(updatedParticipant.ac) || 0) + value);
-      } else if (stat.startsWith('hitModifier')) {
-        // Handle attack modifiers
-        const attackIndex = stat.replace('hitModifier', '') - 1;
-        if (updatedParticipant.attacks && updatedParticipant.attacks[attackIndex]) {
-          const modifierField = ['firstHitModifier', 'secondHitModifier', 'thirdHitModifier'][attackIndex];
-          updatedParticipant.attacks[attackIndex][modifierField] = 
-            Math.max(0, (Number(updatedParticipant.attacks[attackIndex][modifierField]) || 0) + value);
+      switch (stat) {
+        case 'ac':
+          updatedParticipant.ac = Math.max(0, (Number(updatedParticipant.ac) || 0) + value);
+          break;
+        case 'dc':
+          updatedParticipant.dc = Math.max(0, (Number(updatedParticipant.dc) || 0) + value);
+          break;
+        case 'perception':
+          updatedParticipant.perception = Math.max(0, (Number(updatedParticipant.perception) || 0) + value);
+          break;
+        case 'fortitude':
+          updatedParticipant.fortitude = Math.max(0, (Number(updatedParticipant.fortitude) || 0) + value);
+          break;
+        case 'reflex':
+          updatedParticipant.reflex = Math.max(0, (Number(updatedParticipant.reflex) || 0) + value);
+          break;
+        case 'will':
+          updatedParticipant.will = Math.max(0, (Number(updatedParticipant.will) || 0) + value);
+          break;
+        case 'meleeFirstHitModifier':
+        case 'meleeSecondHitModifier':
+        case 'meleeThirdHitModifier': {
+          if (updatedParticipant.attacks) {
+            const which = stat.replace('melee', '').replace('Modifier', '');
+            const key = which.charAt(0).toLowerCase() + which.slice(1) + 'Modifier';
+            updatedParticipant.attacks = updatedParticipant.attacks.map(attack => {
+              if ((attack.attackCategory === 'melee' || attack.attackType === 'melee')) {
+                return {
+                  ...attack,
+                  [key]: Math.max(0, (Number(attack[key]) || 0) + value)
+                };
+              }
+              return attack;
+            });
+          }
+          break;
         }
+        case 'rangedFirstHitModifier':
+        case 'rangedSecondHitModifier':
+        case 'rangedThirdHitModifier': {
+          if (updatedParticipant.attacks) {
+            const which = stat.replace('ranged', '').replace('Modifier', '');
+            const key = which.charAt(0).toLowerCase() + which.slice(1) + 'Modifier';
+            updatedParticipant.attacks = updatedParticipant.attacks.map(attack => {
+              if ((attack.attackCategory === 'ranged' || attack.attackType === 'ranged')) {
+                return {
+                  ...attack,
+                  [key]: Math.max(0, (Number(attack[key]) || 0) + value)
+                };
+              }
+              return attack;
+            });
+          }
+          break;
+        }
+        case 'spellFirstHitModifier':
+        case 'spellSecondHitModifier':
+        case 'spellThirdHitModifier': {
+          if (updatedParticipant.attacks) {
+            const which = stat.replace('spell', '').replace('Modifier', '');
+            const key = which.charAt(0).toLowerCase() + which.slice(1) + 'Modifier';
+            updatedParticipant.attacks = updatedParticipant.attacks.map(attack => {
+              if ((attack.attackCategory === 'spell' || attack.attackType === 'spell')) {
+                return {
+                  ...attack,
+                  [key]: Math.max(0, (Number(attack[key]) || 0) + value)
+                };
+              }
+              return attack;
+            });
+          }
+          break;
+        }
+        case 'meleeDamage':
+          if (updatedParticipant.attacks) {
+            updatedParticipant.attacks = updatedParticipant.attacks.map(attack => {
+              // Only affect attacks that are strictly melee
+              if ((attack.attackCategory && attack.attackCategory.toLowerCase() === 'melee') || (attack.attackType && attack.attackType.toLowerCase() === 'melee')) {
+                return {
+                  ...attack,
+                  damage: modifyDamageExpression(attack.damage, value)
+                };
+              }
+              return attack;
+            });
+          }
+          break;
       }
     });
+
+    // Special handling for Drained
+    if (conditionId === 'drained') {
+      // Store originalMaxHp if not present
+      if (updatedParticipant.originalMaxHp === undefined) {
+        updatedParticipant.originalMaxHp = Number(updatedParticipant.maxHp);
+      }
+      const stacks = updatedParticipant.conditions[conditionId].stacks;
+      const level = Number(updatedParticipant.level) || 1;
+      const reduction = stacks * level; // Deduct (stacks * level) HP
+      // Calculate new max HP
+      const newMaxHp = Math.max(0, updatedParticipant.originalMaxHp - reduction);
+      // Calculate how much HP was reduced from max
+      const maxHpReduction = updatedParticipant.originalMaxHp - newMaxHp;
+      // Reduce current HP by the same amount
+      const newCurrentHp = Math.max(0, Number(updatedParticipant.hp) - maxHpReduction);
+      // Update both values
+      updatedParticipant.maxHp = newMaxHp;
+      updatedParticipant.hp = newCurrentHp;
+    }
 
     console.log('Final participant update:', {
       id: updatedParticipant.battleId,
@@ -240,16 +425,41 @@ function BattleTab({
       ac: updatedParticipant.ac,
       conditions: updatedParticipant.conditions
     });
-    
+
     onUpdateBattleParticipant(updatedParticipant);
   };
 
-  const handleRemoveCondition = (participantId, conditionId) => {
+  const handleRemoveCondition = (participantId, conditionId, instance = null) => {
     const participant = participants.find(p => p.battleId === participantId);
     if (!participant || !participant.conditions?.[conditionId]) return;
 
-    const condition = CONDITIONS[conditionId.toUpperCase().replace('-', '_')];
-    if (!condition) return;
+    // Find condition by ID (try both formats)
+    const condition = CONDITIONS[conditionId.toUpperCase().replace('-', '_')] ||
+      Object.values(CONDITIONS).find(c => c.id === conditionId);
+    if (!condition) {
+      console.log('Condition not found for removal:', conditionId);
+      return;
+    }
+
+    // Special handling for persistent damage instances
+    if (conditionId === 'persistentDamage' && instance) {
+      const updatedParticipant = { ...participant };
+      const instances = updatedParticipant.conditions.persistentDamage.instances || [];
+      const newInstances = instances.filter(i => 
+        !(i.damageType === instance.damageType && i.damageValue === instance.damageValue)
+      );
+
+      if (newInstances.length === 0) {
+        // Remove the entire condition if no instances remain
+        const { persistentDamage, ...remainingConditions } = updatedParticipant.conditions;
+        updatedParticipant.conditions = remainingConditions;
+      } else {
+        updatedParticipant.conditions.persistentDamage.instances = newInstances;
+      }
+
+      onUpdateBattleParticipant(updatedParticipant);
+      return;
+    }
 
     // Remove one stack of the condition
     const currentStacks = participant.conditions[conditionId].stacks;
@@ -270,17 +480,148 @@ function BattleTab({
       updatedParticipant.conditions = remainingConditions;
     }
 
-    // Remove condition effects
+    // Helper function to modify damage expression
+    const modifyDamageExpression = (damage, modifier) => {
+      if (!damage) return damage;
+
+      // Match patterns like "4d4+4" or "2d6+3" or "1d8"
+      const match = damage.match(/^(\d+)d(\d+)(?:\+(\d+))?$/);
+      if (!match) return damage;
+
+      const [, dice, sides, bonus] = match;
+      const newBonus = bonus ? Number(bonus) - modifier : -modifier;
+
+      // If the bonus becomes 0 or negative, just return the dice part
+      if (newBonus <= 0) {
+        return `${dice}d${sides}`;
+      }
+
+      return `${dice}d${sides}+${newBonus}`;
+    };
+
+    // Remove all condition effects
     Object.entries(condition.effects).forEach(([stat, value]) => {
-      if (stat === 'ac') {
-        updatedParticipant.ac = Math.max(0, (Number(updatedParticipant.ac) || 0) - value);
-      } else if (stat.startsWith('hitModifier')) {
-        const attackIndex = stat.replace('hitModifier', '') - 1;
-        if (updatedParticipant.attacks && updatedParticipant.attacks[attackIndex]) {
-          const modifierField = ['firstHitModifier', 'secondHitModifier', 'thirdHitModifier'][attackIndex];
-          updatedParticipant.attacks[attackIndex][modifierField] = 
-            Math.max(0, (Number(updatedParticipant.attacks[attackIndex][modifierField]) || 0) - value);
+      switch (stat) {
+        case 'ac':
+          updatedParticipant.ac = Math.max(0, (Number(updatedParticipant.ac) || 0) - value);
+          break;
+        case 'dc':
+          updatedParticipant.dc = Math.max(0, (Number(updatedParticipant.dc) || 0) - value);
+          break;
+        case 'perception':
+          updatedParticipant.perception = Math.max(0, (Number(updatedParticipant.perception) || 0) - value);
+          break;
+        case 'fortitude':
+          updatedParticipant.fortitude = Math.max(0, (Number(updatedParticipant.fortitude) || 0) - value);
+          break;
+        case 'reflex':
+          updatedParticipant.reflex = Math.max(0, (Number(updatedParticipant.reflex) || 0) - value);
+          break;
+        case 'will':
+          updatedParticipant.will = Math.max(0, (Number(updatedParticipant.will) || 0) - value);
+          break;
+        case 'meleeFirstHitModifier':
+        case 'meleeSecondHitModifier':
+        case 'meleeThirdHitModifier': {
+          if (updatedParticipant.attacks) {
+            const which = stat.replace('melee', '').replace('Modifier', '');
+            const key = which.charAt(0).toLowerCase() + which.slice(1) + 'Modifier';
+            updatedParticipant.attacks = updatedParticipant.attacks.map(attack => {
+              if ((attack.attackCategory === 'melee' || attack.attackType === 'melee')) {
+                return {
+                  ...attack,
+                  [key]: Math.max(0, (Number(attack[key]) || 0) - value)
+                };
+              }
+              return attack;
+            });
+          }
+          break;
         }
+        case 'rangedFirstHitModifier':
+        case 'rangedSecondHitModifier':
+        case 'rangedThirdHitModifier': {
+          if (updatedParticipant.attacks) {
+            const which = stat.replace('ranged', '').replace('Modifier', '');
+            const key = which.charAt(0).toLowerCase() + which.slice(1) + 'Modifier';
+            updatedParticipant.attacks = updatedParticipant.attacks.map(attack => {
+              if ((attack.attackCategory === 'ranged' || attack.attackType === 'ranged')) {
+                return {
+                  ...attack,
+                  [key]: Math.max(0, (Number(attack[key]) || 0) - value)
+                };
+              }
+              return attack;
+            });
+          }
+          break;
+        }
+        case 'spellFirstHitModifier':
+        case 'spellSecondHitModifier':
+        case 'spellThirdHitModifier': {
+          if (updatedParticipant.attacks) {
+            const which = stat.replace('spell', '').replace('Modifier', '');
+            const key = which.charAt(0).toLowerCase() + which.slice(1) + 'Modifier';
+            updatedParticipant.attacks = updatedParticipant.attacks.map(attack => {
+              if ((attack.attackCategory === 'spell' || attack.attackType === 'spell')) {
+                return {
+                  ...attack,
+                  [key]: Math.max(0, (Number(attack[key]) || 0) - value)
+                };
+              }
+              return attack;
+            });
+          }
+          break;
+        }
+        case 'meleeDamage':
+          if (updatedParticipant.attacks) {
+            updatedParticipant.attacks = updatedParticipant.attacks.map(attack => {
+              // Only affect attacks that are strictly melee
+              if ((attack.attackCategory && attack.attackCategory.toLowerCase() === 'melee') || (attack.attackType && attack.attackType.toLowerCase() === 'melee')) {
+                return {
+                  ...attack,
+                  damage: modifyDamageExpression(attack.damage, value)
+                };
+              }
+              return attack;
+            });
+          }
+          break;
+      }
+    });
+
+    // Special handling for Drained
+    if (conditionId === 'drained') {
+      if (updatedParticipant.originalMaxHp !== undefined) {
+        const stacks = updatedParticipant.conditions[conditionId]?.stacks ? updatedParticipant.conditions[conditionId].stacks - 1 : 0;
+        const level = Number(updatedParticipant.level) || 1;
+        const reduction = stacks * level; // Deduct (stacks * level) HP
+        // Calculate new max HP
+        const newMaxHp = Math.max(0, updatedParticipant.originalMaxHp - reduction);
+        // Calculate how much HP was reduced from max
+        const maxHpReduction = updatedParticipant.originalMaxHp - newMaxHp;
+        // Reduce current HP by the same amount
+        const newCurrentHp = Math.max(0, Number(updatedParticipant.hp) - maxHpReduction);
+        // Update both values
+        updatedParticipant.maxHp = newMaxHp;
+        updatedParticipant.hp = newCurrentHp;
+        // If no more stacks, restore original max HP
+        if (stacks <= 0) {
+          updatedParticipant.maxHp = updatedParticipant.originalMaxHp;
+          delete updatedParticipant.originalMaxHp;
+        }
+      }
+    }
+
+    console.log('Removing condition:', {
+      participantId,
+      conditionId,
+      condition,
+      updatedParticipant: {
+        id: updatedParticipant.battleId,
+        name: updatedParticipant.name,
+        conditions: updatedParticipant.conditions
       }
     });
 
@@ -328,6 +669,203 @@ function BattleTab({
     return () => { window.updateBattleParticipantInitiative = undefined; };
   }, []);
 
+  // Helper function to check if a stat is affected by conditions (optionally for a specific attack)
+  const isStatAffectedByConditions = (participant, stat, attack = null) => {
+    if (!participant.conditions) return false;
+    return Object.entries(participant.conditions).some(([conditionId, data]) => {
+      const condition = CONDITIONS[conditionId.toUpperCase().replace('-', '_')] ||
+        Object.values(CONDITIONS).find(c => c.id === conditionId);
+      if (!condition) return false;
+      // For attack modifiers, check for per-type keys
+      if ((stat === 'firstHitModifier' || stat === 'secondHitModifier' || stat === 'thirdHitModifier') && attack) {
+        const type = (attack.attackCategory || attack.attackType || '').toLowerCase();
+        let effectKey = '';
+        if (type === 'melee') effectKey = 'melee' + stat.charAt(0).toUpperCase() + stat.slice(1);
+        else if (type === 'ranged') effectKey = 'ranged' + stat.charAt(0).toUpperCase() + stat.slice(1);
+        else if (type === 'spell') effectKey = 'spell' + stat.charAt(0).toUpperCase() + stat.slice(1);
+        if (effectKey && effectKey in condition.effects) return true;
+      }
+      // For damage, only highlight if the condition affects the correct type
+      if (stat === 'meleeDamage' && attack) {
+        const type = (attack.attackCategory || attack.attackType || '').toLowerCase();
+        if (type === 'melee' && 'meleeDamage' in condition.effects) return true;
+        if (type === 'ranged' && 'rangedDamage' in condition.effects) return true;
+        if (type === 'spell' && 'spellDamage' in condition.effects) return true;
+      }
+      // Check if the condition affects this stat (for non-attack stats)
+      if (stat === 'ac' && 'ac' in condition.effects) return true;
+      if (stat === 'dc' && 'dc' in condition.effects) return true;
+      if (stat === 'perception' && 'perception' in condition.effects) return true;
+      if (stat === 'fortitude' && 'fortitude' in condition.effects) return true;
+      if (stat === 'reflex' && 'reflex' in condition.effects) return true;
+      if (stat === 'will' && 'will' in condition.effects) return true;
+      return false;
+    });
+  };
+
+  // Helper function to render a stat with conditional styling (optionally for a specific attack)
+  const renderStat = (participant, stat, value, attack = null) => {
+    const isAffected = isStatAffectedByConditions(participant, stat, attack);
+    if (value === null || value === undefined || value === '' || (typeof value !== 'string' && typeof value !== 'number')) {
+      return <span>—</span>;
+    }
+    return (
+      <span style={{ color: isAffected ? 'red' : 'inherit' }}>
+        {value}
+      </span>
+    );
+  };
+
+  // Helper function to render attack modifiers
+  const renderAttackModifiers = (participant, attack) => {
+    const modifiers = [
+      attack.firstHitModifier,
+      attack.secondHitModifier,
+      attack.thirdHitModifier
+    ].filter(mod => mod !== null && mod !== undefined && mod !== '');
+
+    if (modifiers.length === 0) return null;
+
+    return modifiers.map((mod, index) => (
+      <React.Fragment key={index}>
+        {renderStat(participant, ['firstHitModifier', 'secondHitModifier', 'thirdHitModifier'][index], mod, attack)}
+        {index < modifiers.length - 1 ? '/' : ''}
+      </React.Fragment>
+    ));
+  };
+
+  // Helper function to render damage
+  const renderDamage = (participant, attack) => {
+    if (!attack.damage) return null;
+    return (
+      <span>
+        {' ('}
+        {renderStat(participant, 'meleeDamage', attack.damage, attack)}
+        {')'}
+      </span>
+    );
+  };
+
+  // Helper to safely get a numeric/string attack modifier for spells
+  const getSpellAttackModifier = atk => {
+    let result = '—';
+    if (typeof atk.firstHitModifier === 'number' || typeof atk.firstHitModifier === 'string') {
+      result = atk.firstHitModifier;
+    } else if (typeof atk.attackModifier === 'number' || typeof atk.attackModifier === 'string') {
+      result = atk.attackModifier;
+    } else if (atk.attackModifier && typeof atk.attackModifier === 'object') {
+      if ('value' in atk.attackModifier && (typeof atk.attackModifier.value === 'number' || typeof atk.attackModifier.value === 'string')) {
+        result = atk.attackModifier.value;
+      } else if ('modifier' in atk.attackModifier && (typeof atk.attackModifier.modifier === 'number' || typeof atk.attackModifier.modifier === 'string')) {
+        result = atk.attackModifier.modifier;
+      } else {
+        for (const key in atk.attackModifier) {
+          if (typeof atk.attackModifier[key] === 'number' || typeof atk.attackModifier[key] === 'string') {
+            result = atk.attackModifier[key];
+            break;
+          }
+        }
+      }
+    }
+    console.log('Spell attack modifier for', atk.attackName, ':', result, 'typeof:', typeof result);
+    return result;
+  };
+
+  // Add function to handle persistent damage application
+  const handlePersistentDamage = (participant) => {
+    if (!participant.conditions?.persistentDamage) return;
+
+    // Get all persistent damage instances
+    const persistentDamageInstances = participant.conditions.persistentDamage.instances || [];
+    
+    // Apply damage for each instance
+    let totalDamage = 0;
+    persistentDamageInstances.forEach(instance => {
+      totalDamage += instance.damageValue;
+    });
+
+    // Apply total damage
+    if (totalDamage > 0 && onUpdateParticipantHP) {
+      const newHp = Math.max(0, Number(participant.hp) - totalDamage);
+      onUpdateParticipantHP(participant.battleId, newHp);
+    }
+
+    // Show removal check dialog for each instance
+    if (persistentDamageInstances.length > 0) {
+      const firstInstance = persistentDamageInstances[0];
+      setPersistentDamageDialog({
+        show: true,
+        participantId: participant.battleId,
+        damageType: firstInstance.damageType,
+        damageValue: firstInstance.damageValue,
+        remainingInstances: persistentDamageInstances.slice(1)
+      });
+    }
+  };
+
+  // Add function to handle persistent damage removal check
+  const handlePersistentDamageCheck = (shouldRemove) => {
+    const { participantId, damageType, damageValue, remainingInstances } = persistentDamageDialog;
+    const participant = participants.find(p => p.battleId === participantId);
+    
+    if (!participant) return;
+
+    if (shouldRemove) {
+      // Remove this instance of persistent damage
+      const updatedParticipant = { ...participant };
+      const instances = updatedParticipant.conditions.persistentDamage.instances || [];
+      const newInstances = instances.filter(instance => 
+        !(instance.damageType === damageType && instance.damageValue === damageValue)
+      );
+
+      if (newInstances.length === 0) {
+        // Remove the entire condition if no instances remain
+        const { persistentDamage, ...remainingConditions } = updatedParticipant.conditions;
+        updatedParticipant.conditions = remainingConditions;
+      } else {
+        updatedParticipant.conditions.persistentDamage.instances = newInstances;
+      }
+
+      onUpdateBattleParticipant(updatedParticipant);
+    }
+
+    // Show dialog for next instance if any remain
+    if (remainingInstances && remainingInstances.length > 0) {
+      const nextInstance = remainingInstances[0];
+      setPersistentDamageDialog({
+        show: true,
+        participantId,
+        damageType: nextInstance.damageType,
+        damageValue: nextInstance.damageValue,
+        remainingInstances: remainingInstances.slice(1)
+      });
+    } else {
+      setPersistentDamageDialog({ show: false });
+    }
+  };
+
+  // Modify handleFinishTurn to apply persistent damage
+  const handleFinishTurn = () => {
+    if (onFinishTurn) {
+      const currentParticipant = participants.find(p => p.battleId === currentTurn);
+      if (currentParticipant) {
+        handlePersistentDamage(currentParticipant);
+      }
+      onFinishTurn();
+    }
+  };
+
+  // Add effect to handle persistent damage at start of round
+  React.useEffect(() => {
+    if (isBattleStarted && currentRound > 0) {
+      // Find the participant with the current turn
+      const currentParticipant = participants.find(p => p.battleId === currentTurn);
+      if (currentParticipant) {
+        handlePersistentDamage(currentParticipant);
+      }
+    }
+  }, [currentRound, isBattleStarted, currentTurn]);
+
   return (
     <StrictMode>
       <DragDropContext onDragEnd={handleDragEnd}>
@@ -353,7 +891,7 @@ function BattleTab({
                       <>
                         <Button
                           variant="primary"
-                          onClick={onFinishTurn}
+                          onClick={handleFinishTurn}
                         >
                           Finish Turn <ArrowRight />
                         </Button>
@@ -378,8 +916,8 @@ function BattleTab({
                 </Card.Header>
                 <ListGroup variant="flush">
                   {participants.map((participant) => (
-                    <Droppable 
-                      key={participant.battleId} 
+                    <Droppable
+                      key={participant.battleId}
                       droppableId={String(participant.battleId)}
                       isDropDisabled={!isBattleStarted}
                     >
@@ -387,11 +925,10 @@ function BattleTab({
                         <ListGroupItem
                           ref={provided.innerRef}
                           {...provided.droppableProps}
-                          className={`d-flex justify-content-between align-items-center ${
-                            currentTurn === participant.battleId ? 'highlighted-turn' : ''
-                          } ${Number(participant.hp) <= 0 ? 'hp-below-zero' : ''
-                          } ${currentTurn === participant.battleId && Number(participant.hp) <= 0 ? 'hp-below-zero-highlighted' : ''
-                          } ${snapshot.isDraggingOver ? 'droppable-active' : ''}`}
+                          className={`d-flex justify-content-between align-items-center ${currentTurn === participant.battleId ? 'highlighted-turn' : ''
+                            } ${Number(participant.hp) <= 0 ? 'hp-below-zero' : ''
+                            } ${currentTurn === participant.battleId && Number(participant.hp) <= 0 ? 'hp-below-zero-highlighted' : ''
+                            } ${snapshot.isDraggingOver ? 'droppable-active' : ''}`}
                         >
                           <div className="d-flex flex-column">
                             <div>
@@ -424,10 +961,10 @@ function BattleTab({
                             <div className="small text-muted mt-1">
                               {participant.type === 'creature' ? (
                                 <>
+
                                   <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
-                                    HP: {participant.hp}
-                                    <span className="ms-2">
-                                      AC: {participant.ac}</span>
+                                    HP: {participant.hp} / {participant.maxHp !== undefined && participant.maxHp !== '' ? participant.maxHp : participant.hp}
+                                    
                                     <input
                                       type="number"
                                       className="form-control d-inline-block ms-2"
@@ -447,14 +984,19 @@ function BattleTab({
                                       -
                                     </Button>
                                   </div>
-
+                                  <div>
+                                    AC: {renderStat(participant, 'ac', participant.ac)}
+                                    <span className="ms-2">
+                                    Level: {renderStat(participant, 'level', participant.level)}
+                                    </span>
+                                  </div>
                                   <div>
                                     <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
-                                      Fortitude: {participant.fortitude}
+                                      Fortitude: {renderStat(participant, 'fortitude', participant.fortitude)}
                                       <span className="ms-2">
-                                        Reflex: {participant.reflex}
+                                        Reflex: {renderStat(participant, 'reflex', participant.reflex)}
                                       </span>
-                                      Will: {participant.will}
+                                      Will: {renderStat(participant, 'will', participant.will)}
                                     </div>
                                   </div>
 
@@ -468,11 +1010,8 @@ function BattleTab({
                                             {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'melee').map((atk, i) => (
                                               atk.attackName ? (
                                                 <li key={i} style={{ listStyleType: 'disc' }}>
-                                                  {atk.attackName} {[
-                                                    atk.firstHitModifier,
-                                                    atk.secondHitModifier,
-                                                    atk.thirdHitModifier
-                                                  ].filter(Boolean).join('/')} {atk.damage ? `(${atk.damage})` : ''}
+                                                  {atk.attackName} {renderAttackModifiers(participant, atk)}
+                                                  {renderDamage(participant, atk)}
                                                 </li>
                                               ) : null
                                             ))}
@@ -487,11 +1026,8 @@ function BattleTab({
                                             {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'ranged').map((atk, i) => (
                                               atk.attackName ? (
                                                 <li key={i} style={{ listStyleType: 'disc' }}>
-                                                  {atk.attackName} {[
-                                                    atk.firstHitModifier,
-                                                    atk.secondHitModifier,
-                                                    atk.thirdHitModifier
-                                                  ].filter(Boolean).join('/')} {atk.damage ? `(${atk.damage})` : ''}
+                                                  {atk.attackName} {renderAttackModifiers(participant, atk)}
+                                                  {renderDamage(participant, atk)}
                                                 </li>
                                               ) : null
                                             ))}
@@ -506,7 +1042,7 @@ function BattleTab({
                                             {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'spell').map((atk, i) => (
                                               atk.attackName ? (
                                                 <li key={i} style={{ listStyleType: 'disc' }}>
-                                                  <span className="text-muted">[spell]</span> {atk.attackName}
+                                                  <span className="text-muted"></span> {atk.attackName}
                                                   <span>
                                                     {/* Actions icon */}
                                                     {(() => {
@@ -528,10 +1064,30 @@ function BattleTab({
                                                     {atk.targetOrArea === 'target' && atk.targetCount && `, Targets: ${atk.targetCount}`}
                                                     {atk.targetOrArea === 'area' && atk.areaType && `, Area: ${atk.areaType}`}
                                                     {atk.range && `, Range: ${atk.range}`}
-                                                    {atk.attackOrSave === 'attack' && `, Attack Modifier: ${atk.attackModifier}`}
-                                                    {atk.attackOrSave === 'save' && `, Save: ${atk.saveType || ''} DC ${atk.attackModifier || ''}`}
-                                                    {atk.damage && `, Damage: ${atk.damage}`}
-                                                    {/* {atk.tradition && atk.tradition.length > 0 && `, Tradition: ${atk.tradition.join(', ')}`} */}
+                                                    {/* FIXED SPELL ATTACK MODIFIER DISPLAY */}
+                                                    {(() => {
+                                                      if (atk.attackOrSave === 'attack') {
+                                                        // console.log('Rendering spell attack:', atk);
+                                                        let mod = atk.attackModifier;
+                                                        if (mod && typeof mod === 'object') {
+                                                          if ('value' in mod && (typeof mod.value === 'number' || typeof mod.value === 'string')) mod = mod.value;
+                                                          else if ('modifier' in mod && (typeof mod.modifier === 'number' || typeof mod.modifier === 'string')) mod = mod.modifier;
+                                                          else {
+                                                            for (const key in mod) {
+                                                              if (typeof mod[key] === 'number' || typeof mod[key] === 'string') {
+                                                                mod = mod[key];
+                                                                break;
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                        if (mod === undefined || mod === null || mod === '' || (typeof mod !== 'string' && typeof mod !== 'number')) mod = '—';
+                                                        return [', Attack Modifier: ', renderStat(participant, 'firstHitModifier', mod, atk)];
+                                                      }
+                                                      return null;
+                                                    })()}
+                                                    {atk.attackOrSave === 'save' && `, Save: ${atk.saveType || ''} DC ${renderStat(participant, 'dc', atk.attackModifier)}`}
+                                                    {atk.damage && [', Damage: ', renderStat(participant, 'meleeDamage', atk.damage, atk)]}
                                                   </span>
                                                 </li>
                                               ) : null
@@ -582,8 +1138,8 @@ function BattleTab({
                               ) : (
                                 <div className="d-flex align-items-center">
                                   <div>
-                                    HP: {participant.hp || 0}
-                                    <span className="ms-2">AC: {participant.ac || 0}</span>
+                                    HP: {participant.hp} / {participant.maxHp !== undefined && participant.maxHp !== '' ? participant.maxHp : participant.hp}
+                                    <span className="ms-2">AC: {renderStat(participant, 'ac', participant.ac || 0)}</span>
                                   </div>
                                   <div className="d-flex align-items-center"><input
                                     type="number"
@@ -612,18 +1168,63 @@ function BattleTab({
                                 <strong>Conditions:</strong>
                                 <div className="d-flex flex-wrap gap-1 mt-1">
                                   {Object.entries(participant.conditions).map(([conditionId, data]) => {
-                                    const condition = CONDITIONS[conditionId.toUpperCase().replace('-', '_')];
+                                    // Find condition by ID (try both formats)
+                                    const condition = CONDITIONS[conditionId.toUpperCase().replace('-', '_')] ||
+                                      Object.values(CONDITIONS).find(c => c.id === conditionId);
                                     if (!condition) return null;
+
+                                    // Special handling for persistent damage
+                                    if (conditionId === 'persistentDamage' && data.instances) {
+                                      return data.instances.map((instance, index) => (
+                                        <Badge
+                                          key={`${conditionId}-${index}`}
+                                          bg="secondary"
+                                          className="d-flex align-items-center"
+                                          style={{ cursor: 'pointer' }}
+                                        >
+                                          {condition.name} ({instance.damageType}, {instance.damageValue})
+                                          <Button
+                                            variant="light"
+                                            size="sm"
+                                            className="ms-1 py-0 px-1"
+                                            style={{ lineHeight: 1, fontSize: '0.9em' }}
+                                            onClick={e => { e.stopPropagation(); handleRemoveCondition(participant.battleId, conditionId, instance); }}
+                                            title="Remove instance"
+                                          >
+                                            <X />
+                                          </Button>
+                                        </Badge>
+                                      ));
+                                    }
+
                                     return (
                                       <Badge
                                         key={conditionId}
                                         bg="secondary"
                                         className="d-flex align-items-center"
                                         style={{ cursor: 'pointer' }}
-                                        onClick={() => handleRemoveCondition(participant.battleId, conditionId)}
                                       >
                                         {condition.name} ({data.stacks})
-                                        <X className="ms-1" size={12} />
+                                        <Button
+                                          variant="light"
+                                          size="sm"
+                                          className="ms-1 py-0 px-1"
+                                          style={{ lineHeight: 1, fontSize: '0.9em' }}
+                                          onClick={e => { e.stopPropagation(); handleConditionDrop(participant.battleId, conditionId); }}
+                                          title="Add stack"
+                                        >
+                                          +
+                                        </Button>
+                                        <Button
+                                          variant="light"
+                                          size="sm"
+                                          className="ms-1 py-0 px-1"
+                                          style={{ lineHeight: 1, fontSize: '0.9em' }}
+                                          onClick={e => { e.stopPropagation(); handleRemoveCondition(participant.battleId, conditionId); }}
+                                          title="Remove stack"
+                                        >
+                                          -
+                                        </Button>
                                       </Badge>
                                     );
                                   })}
@@ -710,7 +1311,7 @@ function BattleTab({
                       <div className="row">
                         <div className="col-md-4 mb-3">
                           <label className="form-label">HP</label>
-                          <input type="number" className="form-control" value={creatureToEdit.hp} onChange={e => handleEditCreatureChange('hp', e.target.value)} />
+                          <input type="number" className="form-control" value={creatureToEdit.maxHp} onChange={e => handleEditCreatureChange('maxHp', e.target.value)} />
                         </div>
                         <div className="col-md-4 mb-3">
                           <label className="form-label">AC</label>
@@ -792,6 +1393,15 @@ function BattleTab({
               </div>
             </div>
           ) : null}
+
+          <PersistentDamageDialog
+            show={persistentDamageDialog.show}
+            onHide={() => setPersistentDamageDialog({ show: false })}
+            onConfirm={() => handlePersistentDamageCheck(true)}
+            onCancel={() => handlePersistentDamageCheck(false)}
+            damageType={persistentDamageDialog.damageType}
+            damageValue={persistentDamageDialog.damageValue}
+          />
         </Container>
       </DragDropContext>
     </StrictMode>

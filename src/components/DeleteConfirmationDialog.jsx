@@ -16,7 +16,7 @@ function DeleteConfirmationDialog({ open, onClose, onConfirm, title, message }) 
             Cancel
           </Button>
           <Button variant="danger" type="submit" autoFocus>
-            Finish Battle
+            Remove Participant
           </Button>
         </Modal.Footer>
       </form>
