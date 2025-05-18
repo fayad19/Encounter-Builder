@@ -1229,7 +1229,7 @@ function BattleTab({
                                         style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
                                         value={hpInputValues[participant.battleId] || ''}
                                         onChange={e => handleHpInputChange(participant.battleId, e.target.value)}
-                                        placeholder="Damage/Heal"
+                                        placeholder="HP"
                                       />
                                       <Button
                                         variant="outline-success"
