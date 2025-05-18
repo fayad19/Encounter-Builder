@@ -60,6 +60,7 @@ function BattleTab({
   const [editingInitiativeId, setEditingInitiativeId] = useState(null);
   const [initiativeInputValue, setInitiativeInputValue] = useState('');
   const [hpInputValues, setHpInputValues] = useState({});
+  const [showConditionsMenu, setShowConditionsMenu] = useState(true);
   const [persistentDamageDialog, setPersistentDamageDialog] = useState({
     show: false,
     participantId: null,
@@ -871,7 +872,7 @@ function BattleTab({
       <DragDropContext onDragEnd={handleDragEnd}>
         <Container fluid>
           <Row>
-            <Col md={9}>
+            <Col md={showConditionsMenu ? 9 : 12}>
               <Card>
                 <Card.Header className="d-flex justify-content-between align-items-center">
                   <div className="d-flex align-items-center gap-3">
@@ -879,6 +880,13 @@ function BattleTab({
                     <span className="badge bg-secondary">Round: {currentRound}</span>
                   </div>
                   <div className="d-flex gap-2">
+                    <Button
+                      variant="outline-secondary"
+                      size="sm"
+                      onClick={() => setShowConditionsMenu(!showConditionsMenu)}
+                    >
+                      {showConditionsMenu ? 'Hide' : 'Show'} Conditions Menu
+                    </Button>
                     {!isBattleStarted ? (
                       <Button
                         variant="primary"
@@ -930,7 +938,7 @@ function BattleTab({
                             } ${currentTurn === participant.battleId && Number(participant.hp) <= 0 ? 'hp-below-zero-highlighted' : ''
                             } ${snapshot.isDraggingOver ? 'droppable-active' : ''}`}
                         >
-                          <div className="d-flex flex-column">
+                          <div className="d-flex flex-column flex-grow-1">
                             <div>
                               <strong>{participant.name}</strong>
                               {editingInitiativeId === participant.battleId ? (
@@ -1234,6 +1242,30 @@ function BattleTab({
                                 </div>
                               </div>
                             )}
+                            {isBattleStarted && !showConditionsMenu && (
+                              <div className="mt-2">
+                                <div className="d-flex align-items-center gap-2">
+                                  <select
+                                    className="form-select form-select-sm"
+                                    style={{ width: 'auto' }}
+                                    onChange={(e) => {
+                                      const conditionId = e.target.value;
+                                      if (conditionId) {
+                                        handleConditionDrop(participant.battleId, conditionId);
+                                        e.target.value = ''; // Reset selection
+                                      }
+                                    }}
+                                  >
+                                    <option value="">Add Condition...</option>
+                                    {Object.values(CONDITIONS).map((condition) => (
+                                      <option key={condition.id} value={condition.id}>
+                                        {condition.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                            )}
                           </div>
                           <div className="d-flex gap-2 ms-auto">
                             <Button
@@ -1262,9 +1294,11 @@ function BattleTab({
                 </ListGroup>
               </Card>
             </Col>
-            <Col md={3}>
-              <ConditionsMenu isBattleStarted={isBattleStarted} />
-            </Col>
+            {showConditionsMenu && (
+              <Col md={3}>
+                <ConditionsMenu isBattleStarted={isBattleStarted} />
+              </Col>
+            )}
           </Row>
 
           <DeleteConfirmationDialog
