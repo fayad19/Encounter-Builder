@@ -1003,66 +1003,68 @@ function BattleTab({
                             <div className="small text-muted mt-1">
                               {participant.type === 'creature' ? (
                                 <>
-                                  <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
+                                  <div className="mb-1">
                                     HP: {participant.hp} / {participant.maxHp !== undefined && participant.maxHp !== '' ? participant.maxHp : participant.hp}
                                     {participant.tempHp > 0 && (
-                                      <span className="text-info">(+{participant.tempHp} temp)</span>
+                                      <span className="text-info ms-2">(+{participant.tempHp} temp)</span>
                                     )}
                                   </div>
-                                  <div className="d-flex align-items-center ms-2 mb-1">
-                                    <input
-                                      type="number"
-                                      className="form-control d-inline-block"
-                                      style={{ width: 50, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
-                                      value={hpInputValues[participant.battleId] || ''}
-                                      onChange={e => handleHpInputChange(participant.battleId, e.target.value)}
-                                      placeholder="HP"
-                                    />
-                                    <Button
-                                      variant="outline-success"
-                                      size="sm"
-                                      className="ms-1"
-                                      style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                      onClick={() => handleHpHeal(participant)}
-                                      disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
-                                    >
-                                      +
-                                    </Button>
-                                    <Button
-                                      variant="outline-danger"
-                                      size="sm"
-                                      className="ms-1"
-                                      style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                      onClick={() => handleHpDeduct(participant)}
-                                      disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
-                                    >
-                                      -
-                                    </Button>
-                                  </div>
-                                  <div className="d-flex align-items-center ms-2 mb-1">
-                                    <input
-                                      type="number"
-                                      className="form-control d-inline-block"
-                                      style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
-                                      value={tempHpInputValues[participant.battleId] || ''}
-                                      onChange={e => handleTempHpInputChange(participant.battleId, e.target.value)}
-                                      placeholder="Temp"
-                                    />
-                                    <Button
-                                      variant="outline-info"
-                                      size="sm"
-                                      className="ms-1"
-                                      style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                      onClick={() => handleTempHpAdd(participant)}
-                                      disabled={!tempHpInputValues[participant.battleId] || isNaN(Number(tempHpInputValues[participant.battleId]))}
-                                    >
-                                      +
-                                    </Button>
+                                  <div className="d-flex flex-column align-items-start ms-2 mb-1">
+                                    <div className="mb-1">
+                                      <input
+                                        type="number"
+                                        className="form-control d-inline-block"
+                                        style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
+                                        value={hpInputValues[participant.battleId] || ''}
+                                        onChange={e => handleHpInputChange(participant.battleId, e.target.value)}
+                                        placeholder="HP"
+                                      />
+                                      <Button
+                                        variant="outline-success"
+                                        size="sm"
+                                        className="ms-1"
+                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                                        onClick={() => handleHpHeal(participant)}
+                                        disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
+                                      >
+                                        +
+                                      </Button>
+                                      <Button
+                                        variant="outline-danger"
+                                        size="sm"
+                                        className="ms-1"
+                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                                        onClick={() => handleHpDeduct(participant)}
+                                        disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
+                                      >
+                                        -
+                                      </Button>
+                                    </div>
+                                    <div>
+                                      <input
+                                        type="number"
+                                        className="form-control d-inline-block"
+                                        style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
+                                        value={tempHpInputValues[participant.battleId] || ''}
+                                        onChange={e => handleTempHpInputChange(participant.battleId, e.target.value)}
+                                        placeholder="Temp"
+                                      />
+                                      <Button
+                                        variant="outline-info"
+                                        size="sm"
+                                        className="ms-1"
+                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                                        onClick={() => handleTempHpAdd(participant)}
+                                        disabled={!tempHpInputValues[participant.battleId] || isNaN(Number(tempHpInputValues[participant.battleId]))}
+                                      >
+                                        +
+                                      </Button>
+                                    </div>
                                   </div>
                                   <div>
                                     AC: {renderStat(participant, 'ac', participant.ac)}
                                     <span className="ms-2">
-                                    Level: {renderStat(participant, 'level', participant.level)}
+                                      Level: {renderStat(participant, 'level', participant.level)}
                                     </span>
                                   </div>
                                   <div>
@@ -1213,16 +1215,15 @@ function BattleTab({
 
                                 </>
                               ) : (
-                                <div className="d-flex align-items-center">
-                                  <div>
+                                <div className="d-flex flex-column align-items-start ms-2 mb-1">
+                                  <div className="mb-1">
                                     HP: {participant.hp} / {participant.maxHp !== undefined && participant.maxHp !== '' ? participant.maxHp : participant.hp}
                                     {participant.tempHp > 0 && (
-                                      <span className="text-info">(+{participant.tempHp} temp)</span>
+                                      <span className="text-info ms-2">(+{participant.tempHp} temp)</span>
                                     )}
-                                    <span className="ms-2">AC: {renderStat(participant, 'ac', participant.ac || 0)}</span>
                                   </div>
-                                  <div className="d-flex align-items-center">
-                                    <div className="d-flex align-items-center ms-2">
+                                  <div className="d-flex flex-column align-items-start ms-2 mb-1">
+                                    <div className="mb-1">
                                       <input
                                         type="number"
                                         className="form-control d-inline-block"
@@ -1235,7 +1236,7 @@ function BattleTab({
                                         variant="outline-success"
                                         size="sm"
                                         className="ms-1"
-                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                                         onClick={() => handleHpHeal(participant)}
                                         disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
                                       >
@@ -1245,15 +1246,14 @@ function BattleTab({
                                         variant="outline-danger"
                                         size="sm"
                                         className="ms-1"
-                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                                         onClick={() => handleHpDeduct(participant)}
                                         disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
                                       >
                                         -
                                       </Button>
                                     </div>
-
-                                    <div className="d-flex align-items-center ms-2">
+                                    <div>
                                       <input
                                         type="number"
                                         className="form-control d-inline-block"
@@ -1266,12 +1266,18 @@ function BattleTab({
                                         variant="outline-info"
                                         size="sm"
                                         className="ms-1"
-                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                                         onClick={() => handleTempHpAdd(participant)}
                                         disabled={!tempHpInputValues[participant.battleId] || isNaN(Number(tempHpInputValues[participant.battleId]))}
                                       >
                                         +
                                       </Button>
+                                    </div>
+                                    <div className="mt-1">
+                                      <span className="ms-2">AC: {renderStat(participant, 'ac', participant.ac || 0)}</span>
+                                      {participant.level !== undefined && participant.level !== null && (
+                                        <span className="ms-2">Level: {renderStat(participant, 'level', participant.level)}</span>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
