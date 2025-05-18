@@ -60,6 +60,7 @@ function BattleTab({
   const [editingInitiativeId, setEditingInitiativeId] = useState(null);
   const [initiativeInputValue, setInitiativeInputValue] = useState('');
   const [hpInputValues, setHpInputValues] = useState({});
+  const [tempHpInputValues, setTempHpInputValues] = useState({});
   const [showConditionsMenu, setShowConditionsMenu] = useState(true);
   const [persistentDamageDialog, setPersistentDamageDialog] = useState({
     show: false,
@@ -168,15 +169,34 @@ function BattleTab({
     setHpInputValues(prev => ({ ...prev, [battleId]: value }));
   };
 
+  const handleTempHpInputChange = (battleId, value) => {
+    setTempHpInputValues(prev => ({ ...prev, [battleId]: value }));
+  };
+
   const handleHpDeduct = (participant) => {
     const value = Number(hpInputValues[participant.battleId]);
     if (!isNaN(value) && value !== 0) {
       if (onUpdateParticipantHP) {
-        // Deduct from current HP only, do not change maxHp
-        const newHp = Math.max(0, (Number(participant.hp) || 0) - value);
-        onUpdateParticipantHP(participant.battleId, newHp);
+        // Use the new damage handling function that considers temp HP
+        if (typeof window.handleParticipantDamage === 'function') {
+          window.handleParticipantDamage(participant.battleId, value);
+        } else {
+          // Fallback to old behavior if new function not available
+          const newHp = Math.max(0, (Number(participant.hp) || 0) - value);
+          onUpdateParticipantHP(participant.battleId, newHp);
+        }
       }
       setHpInputValues(prev => ({ ...prev, [participant.battleId]: '' }));
+    }
+  };
+
+  const handleTempHpAdd = (participant) => {
+    const value = Number(tempHpInputValues[participant.battleId]);
+    if (!isNaN(value) && value !== 0) {
+      if (typeof window.handleUpdateParticipantTempHP === 'function') {
+        window.handleUpdateParticipantTempHP(participant.battleId, value);
+      }
+      setTempHpInputValues(prev => ({ ...prev, [participant.battleId]: '' }));
     }
   };
 
@@ -972,25 +992,51 @@ function BattleTab({
 
                                   <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
                                     HP: {participant.hp} / {participant.maxHp !== undefined && participant.maxHp !== '' ? participant.maxHp : participant.hp}
+                                    {participant.tempHp > 0 && (
+                                      <span className="text-info">(+{participant.tempHp} temp)</span>
+                                    )}
                                     
-                                    <input
-                                      type="number"
-                                      className="form-control d-inline-block ms-2"
-                                      style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
-                                      value={hpInputValues[participant.battleId] || ''}
-                                      onChange={e => handleHpInputChange(participant.battleId, e.target.value)}
-                                      placeholder="DMG"
-                                    />
-                                    <Button
-                                      variant="outline-danger"
-                                      size="sm"
-                                      className="ms-1"
-                                      style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                      onClick={() => handleHpDeduct(participant)}
-                                      disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
-                                    >
-                                      -
-                                    </Button>
+                                    <div className="d-flex align-items-center ms-2">
+                                      <input
+                                        type="number"
+                                        className="form-control d-inline-block"
+                                        style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
+                                        value={hpInputValues[participant.battleId] || ''}
+                                        onChange={e => handleHpInputChange(participant.battleId, e.target.value)}
+                                        placeholder="DMG"
+                                      />
+                                      <Button
+                                        variant="outline-danger"
+                                        size="sm"
+                                        className="ms-1"
+                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        onClick={() => handleHpDeduct(participant)}
+                                        disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
+                                      >
+                                        -
+                                      </Button>
+                                    </div>
+
+                                    <div className="d-flex align-items-center ms-2">
+                                      <input
+                                        type="number"
+                                        className="form-control d-inline-block"
+                                        style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
+                                        value={tempHpInputValues[participant.battleId] || ''}
+                                        onChange={e => handleTempHpInputChange(participant.battleId, e.target.value)}
+                                        placeholder="Temp"
+                                      />
+                                      <Button
+                                        variant="outline-info"
+                                        size="sm"
+                                        className="ms-1"
+                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        onClick={() => handleTempHpAdd(participant)}
+                                        disabled={!tempHpInputValues[participant.battleId] || isNaN(Number(tempHpInputValues[participant.battleId]))}
+                                      >
+                                        +
+                                      </Button>
+                                    </div>
                                   </div>
                                   <div>
                                     AC: {renderStat(participant, 'ac', participant.ac)}
@@ -1147,29 +1193,53 @@ function BattleTab({
                                 <div className="d-flex align-items-center">
                                   <div>
                                     HP: {participant.hp} / {participant.maxHp !== undefined && participant.maxHp !== '' ? participant.maxHp : participant.hp}
+                                    {participant.tempHp > 0 && (
+                                      <span className="text-info">(+{participant.tempHp} temp)</span>
+                                    )}
                                     <span className="ms-2">AC: {renderStat(participant, 'ac', participant.ac || 0)}</span>
                                   </div>
-                                  <div className="d-flex align-items-center"><input
-                                    type="number"
-                                    className="form-control d-inline-block ms-2"
-                                    style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
-                                    value={hpInputValues[participant.battleId] || ''}
-                                    onChange={e => handleHpInputChange(participant.battleId, e.target.value)}
-                                    placeholder="DMG"
-                                  />
-                                    <Button
-                                      variant="outline-danger"
-                                      size="sm"
-                                      className="ms-1"
-                                      style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', alignItems: 'center', justifyContent: 'center' }}
-                                      onClick={() => handleHpDeduct(participant)}
-                                      disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
-                                    >
-                                      -
-                                    </Button>
-                                  </div>
-                                  <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
-                                    Level:
+                                  <div className="d-flex align-items-center">
+                                    <div className="d-flex align-items-center ms-2">
+                                      <input
+                                        type="number"
+                                        className="form-control d-inline-block"
+                                        style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
+                                        value={hpInputValues[participant.battleId] || ''}
+                                        onChange={e => handleHpInputChange(participant.battleId, e.target.value)}
+                                        placeholder="DMG"
+                                      />
+                                      <Button
+                                        variant="outline-danger"
+                                        size="sm"
+                                        className="ms-1"
+                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        onClick={() => handleHpDeduct(participant)}
+                                        disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
+                                      >
+                                        -
+                                      </Button>
+                                    </div>
+
+                                    <div className="d-flex align-items-center ms-2">
+                                      <input
+                                        type="number"
+                                        className="form-control d-inline-block"
+                                        style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
+                                        value={tempHpInputValues[participant.battleId] || ''}
+                                        onChange={e => handleTempHpInputChange(participant.battleId, e.target.value)}
+                                        placeholder="Temp"
+                                      />
+                                      <Button
+                                        variant="outline-info"
+                                        size="sm"
+                                        className="ms-1"
+                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        onClick={() => handleTempHpAdd(participant)}
+                                        disabled={!tempHpInputValues[participant.battleId] || isNaN(Number(tempHpInputValues[participant.battleId]))}
+                                      >
+                                        +
+                                      </Button>
+                                    </div>
                                   </div>
                                 </div>
                               )}

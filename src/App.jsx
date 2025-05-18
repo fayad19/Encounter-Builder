@@ -539,8 +539,13 @@ function App() {
   // Update HP for a participant in battle
   const handleUpdateParticipantHP = (battleId, newHP) => {
     console.log('handleUpdateParticipantHP called with', { battleId, newHP });
-    // Ensure HP cannot go below 0
-    const clampedHP = Math.max(0, Number(newHP));
+    // Ensure HP cannot go below 0 and cannot exceed maxHP
+    const participant = battleParticipants.find(p => p.battleId === battleId);
+    if (!participant) return;
+    
+    const maxHp = Number(participant.maxHp) || Number(participant.hp);
+    const clampedHP = Math.min(maxHp, Math.max(0, Number(newHP)));
+    
     setBattleParticipants(prev => {
       const updated = prev.map(p => {
         if (p.battleId === battleId) {
@@ -569,6 +574,51 @@ function App() {
       }
       return sorted;
     });
+  };
+
+  // Add new function to handle temporary HP
+  const handleUpdateParticipantTempHP = (battleId, tempHP) => {
+    console.log('handleUpdateParticipantTempHP called with', { battleId, tempHP });
+    // Ensure tempHP cannot go below 0
+    const clampedTempHP = Math.max(0, Number(tempHP));
+    
+    setBattleParticipants(prev => {
+      const updated = prev.map(p => {
+        if (p.battleId === battleId) {
+          return { ...p, tempHp: clampedTempHP };
+        }
+        return p;
+      });
+      return [...updated].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
+    });
+  };
+
+  // Add new function to handle damage with temp HP consideration
+  const handleParticipantDamage = (battleId, damage) => {
+    const participant = battleParticipants.find(p => p.battleId === battleId);
+    if (!participant) return;
+
+    const currentTempHP = Number(participant.tempHp) || 0;
+    const currentHP = Number(participant.hp) || 0;
+    const damageAmount = Number(damage);
+
+    if (currentTempHP > 0) {
+      // If we have temp HP, reduce it first
+      if (damageAmount >= currentTempHP) {
+        // Temp HP is depleted, remaining damage goes to normal HP
+        const remainingDamage = damageAmount - currentTempHP;
+        handleUpdateParticipantTempHP(battleId, 0); // Clear temp HP
+        if (remainingDamage > 0) {
+          handleUpdateParticipantHP(battleId, currentHP - remainingDamage);
+        }
+      } else {
+        // Temp HP absorbs all damage
+        handleUpdateParticipantTempHP(battleId, currentTempHP - damageAmount);
+      }
+    } else {
+      // No temp HP, damage goes directly to normal HP
+      handleUpdateParticipantHP(battleId, currentHP - damageAmount);
+    }
   };
 
   // Update a participant in battle by battleId
@@ -616,6 +666,27 @@ function App() {
 
   // Before rendering BattleTab, sort participants by initiative (descending)
   const sortedParticipants = [...battleParticipants].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
+
+  React.useEffect(() => {
+    window.updateBattleParticipantInitiative = (battleId, newInitiative) => {
+      if (!battleId) return;
+      // Update in App state
+      if (typeof window.setBattleParticipants === 'function') {
+        window.setBattleParticipants(prev => prev.map(p => p.battleId === battleId ? { ...p, initiative: newInitiative } : p));
+      }
+    };
+    return () => { window.updateBattleParticipantInitiative = undefined; };
+  }, []);
+
+  // Add effect to expose HP handling functions
+  React.useEffect(() => {
+    window.handleParticipantDamage = handleParticipantDamage;
+    window.handleUpdateParticipantTempHP = handleUpdateParticipantTempHP;
+    return () => {
+      window.handleParticipantDamage = undefined;
+      window.handleUpdateParticipantTempHP = undefined;
+    };
+  }, [battleParticipants]); // Add battleParticipants as dependency since the functions use it
 
   return (
     <div className="d-flex flex-column min-vh-100">
