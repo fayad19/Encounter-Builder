@@ -1160,6 +1160,9 @@ function BattleTab({
                                       -
                                     </Button>
                                   </div>
+                                  <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
+                                    Level:
+                                  </div>
                                 </div>
                               )}
                             </div>

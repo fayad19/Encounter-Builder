@@ -1,0 +1,9 @@
+--v.0.1.5
+- fixed level and perception saving into the same variable
+- fixed stupify condifition affecting AC
+
+--v.0.1.4
+- Added few more conditions (Including Drained condition)
+- Added persistent damage handling
+- Separated HP to MaxHP and current HP
+- Fixed a bug where HP could go below 0

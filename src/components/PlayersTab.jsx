@@ -31,13 +31,13 @@ function PlayersTab({ players = [], onAddPlayer, onUpdatePlayer, onDeletePlayer,
   };
 
   const handleEditClick = (player) => {
-    setNewPlayer({ name: player.name, hp: player.hp || '', ac: player.ac || '' });
+    setNewPlayer({ name: player.name, hp: player.hp || '', ac: player.ac || '' , level: player.level || ''});
     setEditingPlayer(player);
   };
 
   const handleCancelEdit = () => {
     setEditingPlayer(null);
-    setNewPlayer({ name: '', hp: '', ac: '' });
+    setNewPlayer({ name: '', hp: '', ac: '' , level: ''});
   };
 
   const handleDeleteClick = (player) => {
@@ -96,6 +96,16 @@ function PlayersTab({ players = [], onAddPlayer, onUpdatePlayer, onDeletePlayer,
                     value={newPlayer.ac}
                     onChange={handleInputChange}
                     placeholder="Enter AC"
+                  />
+                </Form.Group>
+                <Form.Group className="mb-3">
+                  <Form.Label>Level</Form.Label>
+                  <Form.Control
+                    type="number"
+                    name="level"
+                    value={newPlayer.level}
+                    onChange={handleInputChange}
+                    placeholder="Enter Level"
                   />
                 </Form.Group>
                 <div className="d-flex gap-2">

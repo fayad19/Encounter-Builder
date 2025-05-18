@@ -204,7 +204,7 @@ function CreaturesTab({
                       <Form.Control
                         type="number"
                         name="level"
-                        value={newCreature.perception}
+                        value={newCreature.level}
                         onChange={handleInputChange}
                         placeholder="Level"
                       />
