@@ -3,9 +3,11 @@ import { Container, Nav, Tab, Button, Modal, Alert } from 'react-bootstrap';
 import CreaturesTab from './components/CreaturesTab';
 import BattleTab from './components/BattleTab';
 import PlayersTab from './components/PlayersTab';
+import BestiaryTab from './components/BestiaryTab';
 import InitiativeDialog from './components/InitiativeDialog';
 import fillip from './assets/fillip.mp3';
 import fillipBg from './assets/fillip.jpg';
+import SpellsTab from './components/SpellsTab';
 
 function App() {
   const audioRef = useRef(null);
@@ -629,64 +631,107 @@ function App() {
   // Handler to set initiative tie state from children
   const handleInitiativeTie = (tieState) => setInitiativeTie(tieState);
 
+  // Consolidate initiative-related effects into a single useEffect
   useEffect(() => {
-    if (lastAddedInitiative === null) return;
-    // Only check for ties if we're in the process of entering initiatives
+    // Skip if no last added initiative or if we're not in initiative entry mode
+    if (lastAddedInitiative === null || !initiativeDialogOpen) return;
+
+    // Check for ties
     const ties = battleParticipants.filter(p => p.initiative === lastAddedInitiative);
     if (ties.length > 1) {
-      setInitiativeTie({ participant: ties[0], tiedParticipants: ties.slice(1), newValue: lastAddedInitiative });
+      setInitiativeTie({ 
+        participant: ties[0], 
+        tiedParticipants: ties.slice(1), 
+        newValue: lastAddedInitiative 
+      });
       setPendingInitiativeParticipant(null);
       return;
     }
-    // If no tie, move to next participant
+
+    // No tie, proceed to next participant
     const nextParticipants = remainingParticipants.slice(1);
     setRemainingParticipants(nextParticipants);
+    
     if (nextParticipants.length > 0) {
       setInitiativeDialogOpen(true);
     } else {
-      // Sort participants by initiative (descending) after all are entered
+      // All participants have initiatives, sort them
       setBattleParticipants(prev => [...prev].sort((a, b) => (b.initiative || 0) - (a.initiative || 0)));
       setInitiativeDialogOpen(false);
     }
-    setLastAddedInitiative(null); // Reset after advancing
-  }, [battleParticipants, lastAddedInitiative, remainingParticipants]);
+    
+    // Reset last added initiative
+    setLastAddedInitiative(null);
+  }, [lastAddedInitiative, initiativeDialogOpen, battleParticipants, remainingParticipants]);
 
+  // Separate effect for sorting participants when all have initiatives
   useEffect(() => {
-    // Only sort if all participants have an initiative and there are no ties or dialogs open
-    const allHaveInitiative = battleParticipants.length > 0 && battleParticipants.every(p => p.initiative !== null && p.initiative !== undefined);
+    // Only sort if:
+    // 1. We have participants
+    // 2. All participants have initiatives
+    // 3. No initiative ties are being resolved
+    // 4. No initiative dialog is open
+    // 5. No remaining participants to process
     if (
-      allHaveInitiative &&
+      battleParticipants.length > 0 &&
+      battleParticipants.every(p => p.initiative !== null && p.initiative !== undefined) &&
       !initiativeTie &&
       !initiativeDialogOpen &&
       remainingParticipants.length === 0
     ) {
-      setBattleParticipants(prev => [...prev].sort((a, b) => (b.initiative || 0) - (a.initiative || 0)));
+      setBattleParticipants(prev => {
+        const sorted = [...prev].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
+        // Only update if the order has actually changed
+        if (JSON.stringify(sorted.map(p => p.battleId)) !== JSON.stringify(prev.map(p => p.battleId))) {
+          return sorted;
+        }
+        return prev;
+      });
     }
   }, [battleParticipants, initiativeTie, initiativeDialogOpen, remainingParticipants]);
 
-  // Before rendering BattleTab, sort participants by initiative (descending)
-  const sortedParticipants = [...battleParticipants].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
-
-  React.useEffect(() => {
+  // Expose window functions in a single effect
+  useEffect(() => {
+    // Set up window functions
     window.updateBattleParticipantInitiative = (battleId, newInitiative) => {
       if (!battleId) return;
-      // Update in App state
-      if (typeof window.setBattleParticipants === 'function') {
-        window.setBattleParticipants(prev => prev.map(p => p.battleId === battleId ? { ...p, initiative: newInitiative } : p));
-      }
+      setBattleParticipants(prev => prev.map(p => p.battleId === battleId ? { ...p, initiative: newInitiative } : p));
     };
-    return () => { window.updateBattleParticipantInitiative = undefined; };
-  }, []);
 
-  // Add effect to expose HP handling functions
-  React.useEffect(() => {
     window.handleParticipantDamage = handleParticipantDamage;
     window.handleUpdateParticipantTempHP = handleUpdateParticipantTempHP;
+
+    // Cleanup
     return () => {
+      window.updateBattleParticipantInitiative = undefined;
       window.handleParticipantDamage = undefined;
       window.handleUpdateParticipantTempHP = undefined;
     };
-  }, [battleParticipants]); // Add battleParticipants as dependency since the functions use it
+  }, []); // Empty dependency array since these functions don't need to be recreated
+
+  // Add handleAddSpell function
+  const handleAddSpell = (spell) => {
+    // Convert spell to attack format
+    const spellAttack = {
+      id: Date.now(),
+      attackName: spell.name,
+      attackType: spell.system.damage ? 'spell' : 'regularSpell',
+      attackCategory: spell.system.damage ? 'spell' : 'regularSpell',
+      actions: spell.system.time?.value || '2',
+      range: spell.system.range?.value || '',
+      description: spell.system.description?.value || '',
+      targetOrArea: spell.system.area ? 'area' : 'target',
+      area: spell.system.area ? `${spell.system.area.value}-foot ${spell.system.area.type}` : '',
+      areaType: spell.system.area?.type || '',
+      save: spell.system.defense?.save ? `${spell.system.defense.save.statistic}${spell.system.defense.save.basic ? ' (basic)' : ''}` : '',
+      damage: spell.system.damage ? Object.values(spell.system.damage).map(d => `${d.formula} ${d.type}`).join(' plus ') : '',
+      duration: spell.system.duration?.value || '',
+      targets: spell.system.target?.value || ''
+    };
+
+    // Add to creatures list as a spell
+    setCreatures(prev => [...prev, spellAttack]);
+  };
 
   return (
     <div className="d-flex flex-column min-vh-100">
@@ -716,13 +761,19 @@ function App() {
             <Nav.Item>
               <Nav.Link eventKey="players">Players</Nav.Link>
             </Nav.Item>
+            <Nav.Item>
+              <Nav.Link eventKey="bestiary">Bestiary</Nav.Link>
+            </Nav.Item>
+            <Nav.Item>
+              <Nav.Link eventKey="spells">Spells</Nav.Link>
+            </Nav.Item>
           </Nav>
 
           <Tab.Content>
             <Tab.Pane eventKey="battle" style={currentTab === 'battle' ? battleTabStyle : {}}>
               {showBattleContent && (
                 <BattleTab
-                  participants={sortedParticipants}
+                  participants={battleParticipants}
                   battleStarted={battleStarted}
                   currentTurn={currentTurn}
                   currentRound={currentRound}
@@ -759,6 +810,12 @@ function App() {
                 onDeletePlayer={handleDeletePlayer}
                 onAddToBattle={handleAddToBattle}
               />
+            </Tab.Pane>
+            <Tab.Pane eventKey="bestiary">
+              <BestiaryTab onAddCreature={handleAddCreature} />
+            </Tab.Pane>
+            <Tab.Pane eventKey="spells">
+              <SpellsTab onAddSpell={handleAddSpell} />
             </Tab.Pane>
           </Tab.Content>
         </Tab.Container>

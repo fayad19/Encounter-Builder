@@ -138,6 +138,7 @@ function ConditionsMenu({ isBattleStarted = false }) {
               >
                 {(provided, snapshot) => (
                   <ListGroup.Item
+                    key={condition.id}
                     ref={provided.innerRef}
                     {...provided.draggableProps}
                     {...provided.dragHandleProps}

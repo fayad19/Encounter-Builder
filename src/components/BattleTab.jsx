@@ -250,7 +250,8 @@ function BattleTab({
     }
 
     // Find the condition by its ID directly
-    const condition = Object.values(CONDITIONS).find(c => c.id === conditionId);
+    const condition = CONDITIONS[conditionId.toUpperCase().replace('-', '_')] ||
+      Object.values(CONDITIONS).find(c => c.id === conditionId);
     if (!condition) {
       console.log('Condition not found:', conditionId, 'Available conditions:', Object.values(CONDITIONS).map(c => c.id));
       return;
@@ -967,10 +968,15 @@ function BattleTab({
                         <ListGroupItem
                           ref={provided.innerRef}
                           {...provided.droppableProps}
-                          className={`d-flex justify-content-between align-items-center ${currentTurn === participant.battleId ? 'highlighted-turn' : ''
-                            } ${Number(participant.hp) <= 0 ? 'hp-below-zero' : ''
-                            } ${currentTurn === participant.battleId && Number(participant.hp) <= 0 ? 'hp-below-zero-highlighted' : ''
-                            } ${snapshot.isDraggingOver ? 'droppable-active' : ''}`}
+                          className={`d-flex justify-content-between align-items-center ${
+                            currentTurn === participant.battleId ? 'highlighted-turn' : ''
+                          } ${
+                            Number(participant.hp) <= 0 ? 'hp-below-zero' : ''
+                          } ${
+                            currentTurn === participant.battleId && Number(participant.hp) <= 0 ? 'hp-below-zero-highlighted' : ''
+                          } ${
+                            snapshot.isDraggingOver ? 'droppable-active' : ''
+                          }`}
                         >
                           <div className="d-flex flex-column flex-grow-1">
                             <div>
@@ -1086,7 +1092,7 @@ function BattleTab({
                                           <ul className="mb-0 ps-3">
                                             {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'melee').map((atk, i) => (
                                               atk.attackName ? (
-                                                <li key={i} style={{ listStyleType: 'disc' }}>
+                                                <li key={`${participant.battleId}-melee-${i}`} style={{ listStyleType: 'disc' }}>
                                                   {atk.attackName} {renderAttackModifiers(participant, atk)}
                                                   {renderDamage(participant, atk)}
                                                 </li>
@@ -1102,7 +1108,7 @@ function BattleTab({
                                           <ul className="mb-0 ps-3">
                                             {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'ranged').map((atk, i) => (
                                               atk.attackName ? (
-                                                <li key={i} style={{ listStyleType: 'disc' }}>
+                                                <li key={`${participant.battleId}-ranged-${i}`} style={{ listStyleType: 'disc' }}>
                                                   {atk.attackName} {renderAttackModifiers(participant, atk)}
                                                   {renderDamage(participant, atk)}
                                                 </li>
@@ -1118,9 +1124,9 @@ function BattleTab({
                                           <ul className="mb-0 ps-3">
                                             {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'spell').map((atk, i) => (
                                               atk.attackName ? (
-                                                <li key={i} style={{ listStyleType: 'disc' }}>
-                                                  <span className="text-muted"></span> {atk.attackName}
-                                                  <span>
+                                                <li key={`${participant.battleId}-spell-${i}`} style={{ listStyleType: 'disc' }}>
+                                                  <span key={`spell-text-${i}`} className="text-muted"></span> {atk.attackName}
+                                                  <span key={`spell-details-${i}`}>
                                                     {/* Actions icon */}
                                                     {(() => {
                                                       let icon = null;
@@ -1131,6 +1137,7 @@ function BattleTab({
                                                       if (icon) {
                                                         return (
                                                           <img
+                                                            key={`spell-icon-${i}`}
                                                             src={icon}
                                                             alt={`${atk.actions} action(s)`}
                                                             style={{ height: '1.2em', verticalAlign: 'middle', marginLeft: 8, marginRight: 4 }}
@@ -1139,13 +1146,12 @@ function BattleTab({
                                                       }
                                                       return null;
                                                     })()}
-                                                    {atk.targetOrArea === 'target' && atk.targetCount && `, Targets: ${atk.targetCount}`}
-                                                    {atk.targetOrArea === 'area' && atk.areaType && `, Area: ${atk.areaType}`}
-                                                    {atk.range && `, Range: ${atk.range}`}
+                                                    {atk.targetOrArea === 'target' && atk.targetCount && <span key={`spell-target-${i}`}>, Targets: {atk.targetCount}</span>}
+                                                    {atk.targetOrArea === 'area' && atk.areaType && <span key={`spell-area-${i}`}>, Area: {atk.areaType}</span>}
+                                                    {atk.range && <span key={`spell-range-${i}`}>, Range: {atk.range}</span>}
                                                     {/* FIXED SPELL ATTACK MODIFIER DISPLAY */}
                                                     {(() => {
                                                       if (atk.attackOrSave === 'attack') {
-                                                        // console.log('Rendering spell attack:', atk);
                                                         let mod = atk.attackModifier;
                                                         if (mod && typeof mod === 'object') {
                                                           if ('value' in mod && (typeof mod.value === 'number' || typeof mod.value === 'string')) mod = mod.value;
@@ -1160,12 +1166,18 @@ function BattleTab({
                                                           }
                                                         }
                                                         if (mod === undefined || mod === null || mod === '' || (typeof mod !== 'string' && typeof mod !== 'number')) mod = '—';
-                                                        return [', Attack Modifier: ', renderStat(participant, 'firstHitModifier', mod, atk)];
+                                                        return [
+                                                          <span key={`spell-attack-label-${i}`}>, Attack Modifier: </span>,
+                                                          <span key={`spell-attack-value-${i}`}>{renderStat(participant, 'firstHitModifier', mod, atk)}</span>
+                                                        ];
                                                       }
                                                       return null;
                                                     })()}
-                                                    {atk.attackOrSave === 'save' && `, Save: ${atk.saveType || ''} DC ${renderStat(participant, 'dc', atk.attackModifier)}`}
-                                                    {atk.damage && [', Damage: ', renderStat(participant, 'meleeDamage', atk.damage, atk)]}
+                                                    {atk.attackOrSave === 'save' && <span key={`spell-save-${i}`}>, Save: {atk.saveType || ''} DC {renderStat(participant, 'dc', atk.attackModifier)}</span>}
+                                                    {atk.damage && [
+                                                      <span key={`spell-damage-label-${i}`}>, Damage: </span>,
+                                                      <span key={`spell-damage-value-${i}`}>{renderStat(participant, 'meleeDamage', atk.damage, atk)}</span>
+                                                    ]}
                                                   </span>
                                                 </li>
                                               ) : null
@@ -1179,9 +1191,9 @@ function BattleTab({
                                           <strong>Regular Spells:</strong>
                                           <ul className="mb-0 ps-3">
                                             {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'regularSpell').map((atk, i) => (
-                                              <li key={i} style={{ listStyleType: 'circle' }}>
-                                                <span className="text-muted">[regular spell]</span>
-                                                {atk.attackName && <strong style={{ marginLeft: 4 }}>{atk.attackName}</strong>}
+                                              <li key={`${participant.battleId}-regularSpell-${i}`} style={{ listStyleType: 'circle' }}>
+                                                <span key={`regularSpell-text-${i}`} className="text-muted"></span>
+                                                {atk.attackName && <strong key={`regularSpell-name-${i}`} style={{ marginLeft: 4 }}>{atk.attackName}</strong>}
                                                 {(() => {
                                                   let icon = null;
                                                   if (atk.actions === '1') icon = action1;
@@ -1191,6 +1203,7 @@ function BattleTab({
                                                   if (icon) {
                                                     return (
                                                       <img
+                                                        key={`regularSpell-icon-${i}`}
                                                         src={icon}
                                                         alt={`${atk.actions} action(s)`}
                                                         style={{ height: '1.2em', verticalAlign: 'middle', marginLeft: 8, marginRight: 4 }}
@@ -1199,11 +1212,11 @@ function BattleTab({
                                                   }
                                                   return null;
                                                 })()}
-                                                {atk.range && `, Range: ${atk.range}`}
-                                                {atk.targets && `, Targets: ${atk.targets}`}
-                                                {atk.duration && `, Duration: ${atk.duration}`}
+                                                {atk.range && <span key={`regularSpell-range-${i}`}>, Range: {atk.range}</span>}
+                                                {atk.targets && <span key={`regularSpell-targets-${i}`}>, Targets: {atk.targets}</span>}
+                                                {atk.duration && <span key={`regularSpell-duration-${i}`}>, Duration: {atk.duration}</span>}
                                                 {atk.description && (
-                                                  <div style={{ marginLeft: 24, marginTop: 2 }}>{atk.description}</div>
+                                                  <div key={`regularSpell-desc-${i}`} style={{ marginLeft: 24, marginTop: 2 }}>{atk.description}</div>
                                                 )}
                                               </li>
                                             ))}
@@ -1287,39 +1300,44 @@ function BattleTab({
                               <div className="mt-2">
                                 <strong>Conditions:</strong>
                                 <div className="d-flex flex-wrap gap-1 mt-1">
-                                  {Object.entries(participant.conditions).map(([conditionId, data]) => {
-                                    // Find condition by ID (try both formats)
+                                  {Object.entries(participant.conditions || {}).map(([conditionId, data]) => {
                                     const condition = CONDITIONS[conditionId.toUpperCase().replace('-', '_')] ||
                                       Object.values(CONDITIONS).find(c => c.id === conditionId);
                                     if (!condition) return null;
 
-                                    // Special handling for persistent damage
                                     if (conditionId === 'persistentDamage' && data.instances) {
-                                      return data.instances.map((instance, index) => (
-                                        <Badge
-                                          key={`${conditionId}-${index}`}
-                                          bg="secondary"
-                                          className="d-flex align-items-center"
-                                          style={{ cursor: 'pointer' }}
-                                        >
-                                          {condition.name} ({instance.damageType}, {instance.damageValue})
-                                          <Button
-                                            variant="light"
-                                            size="sm"
-                                            className="ms-1 py-0 px-1"
-                                            style={{ lineHeight: 1, fontSize: '0.9em' }}
-                                            onClick={e => { e.stopPropagation(); handleRemoveCondition(participant.battleId, conditionId, instance); }}
-                                            title="Remove instance"
+                                      return data.instances.map((instance, index) => {
+                                        const badgeKey = `${participant.battleId}-persistentDamage-${instance.damageType}-${index}`;
+                                        return (
+                                          <Badge
+                                            key={badgeKey}
+                                            bg="danger"
+                                            className="d-flex align-items-center"
+                                            style={{ cursor: 'pointer' }}
+                                            onClick={() => handlePersistentDamageClick(participant.battleId, instance.damageType, instance.damageValue)}
                                           >
-                                            <X />
-                                          </Button>
-                                        </Badge>
-                                      ));
+                                            {instance.damageType} {instance.damageValue}
+                                            <Button
+                                              variant="light"
+                                              size="sm"
+                                              className="ms-1 py-0 px-1"
+                                              style={{ lineHeight: 1, fontSize: '0.9em' }}
+                                              onClick={e => {
+                                                e.stopPropagation();
+                                                handleRemoveCondition(participant.battleId, conditionId, instance);
+                                              }}
+                                            >
+                                              <X size={12} />
+                                            </Button>
+                                          </Badge>
+                                        );
+                                      });
                                     }
 
+                                    const badgeKey = `${participant.battleId}-condition-${conditionId}`;
                                     return (
                                       <Badge
-                                        key={conditionId}
+                                        key={badgeKey}
                                         bg="secondary"
                                         className="d-flex align-items-center"
                                         style={{ cursor: 'pointer' }}
