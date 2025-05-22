@@ -54,7 +54,7 @@ function BestiaryTab({ onAddCreature }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/src/data/monsters/${monster.filename}`);
+      const res = await fetch(`/data/monsters/${monster.filename}`);
       if (!res.ok) throw new Error('Failed to load monster data');
       const data = await res.json();
       setSelectedMonster(data);
@@ -80,22 +80,62 @@ function BestiaryTab({ onAddCreature }) {
   // Compute total pages for pagination
   const totalPages = Math.ceil(filteredMonsters.length / monstersPerPage);
 
-  // Render pagination controls
+  // Render responsive, ellipsed pagination controls
   const renderPagination = () => {
     if (totalPages <= 1) return null;
     const items = [];
-    for (let i = 1; i <= totalPages; i++) {
+    const maxPageButtons = 5; // Number of page buttons to show around current page
+    const showLeftEllipsis = currentPage > 3;
+    const showRightEllipsis = currentPage < totalPages - 2;
+
+    // Always show first page
+    items.push(
+      <Pagination.Item key={1} active={1 === currentPage} onClick={() => setCurrentPage(1)}>
+        1
+      </Pagination.Item>
+    );
+
+    // Show left ellipsis if needed
+    if (showLeftEllipsis) {
+      items.push(<Pagination.Ellipsis key="left-ellipsis" disabled />);
+    }
+
+    // Show pages around current page
+    let startPage = Math.max(2, currentPage - 1);
+    let endPage = Math.min(totalPages - 1, currentPage + 1);
+    if (!showLeftEllipsis) {
+      startPage = 2;
+    }
+    if (!showRightEllipsis) {
+      endPage = totalPages - 1;
+    }
+    for (let i = startPage; i <= endPage; i++) {
       items.push(
         <Pagination.Item key={i} active={i === currentPage} onClick={() => setCurrentPage(i)}>
           {i}
         </Pagination.Item>
       );
     }
+
+    // Show right ellipsis if needed
+    if (showRightEllipsis) {
+      items.push(<Pagination.Ellipsis key="right-ellipsis" disabled />);
+    }
+
+    // Always show last page if more than 1
+    if (totalPages > 1) {
+      items.push(
+        <Pagination.Item key={totalPages} active={totalPages === currentPage} onClick={() => setCurrentPage(totalPages)}>
+          {totalPages}
+        </Pagination.Item>
+      );
+    }
+
     return (
       <Pagination className="justify-content-center mt-3">
-         {currentPage > 1 && <Pagination.Prev onClick={() => setCurrentPage(currentPage - 1)} />}
-         {items}
-         {currentPage < totalPages && <Pagination.Next onClick={() => setCurrentPage(currentPage + 1)} />}
+        {currentPage > 1 && <Pagination.Prev onClick={() => setCurrentPage(currentPage - 1)} />}
+        {items}
+        {currentPage < totalPages && <Pagination.Next onClick={() => setCurrentPage(currentPage + 1)} />}
       </Pagination>
     );
   };
