@@ -1,4 +1,5 @@
 import { openDB } from 'idb';
+import allMonsters from '../data/all-monsters.json';
 
 const DB_NAME = 'monster-database';
 const STORE_NAME = 'monsters';
@@ -32,11 +33,10 @@ async function processBatch(db, monsterBatch) {
 
 export async function loadMonstersIntoDB() {
   const db = await initDB();
-  const monsterFiles = import.meta.glob('../data/monsters/*.json', { eager: true });
   
   try {
     console.log('Starting monster database population...');
-    console.log(`Found ${Object.keys(monsterFiles).length} monster files`);
+    console.log(`Found ${allMonsters.length} monsters in the merged file`);
     
     // Clear existing data
     const clearTx = db.transaction(STORE_NAME, 'readwrite');
@@ -48,14 +48,12 @@ export async function loadMonstersIntoDB() {
     let currentBatch = [];
     let processedCount = 0;
     let errorCount = 0;
-    const totalFiles = Object.keys(monsterFiles).length;
+    const totalMonsters = allMonsters.length;
 
-    for (const [path, monsterData] of Object.entries(monsterFiles)) {
+    for (const monster of allMonsters) {
       try {
-        // monsterData is now the actual data since we used eager: true
-        const monster = monsterData.default || monsterData;
         if (!monster || !monster.system) {
-          console.warn(`Invalid monster data in ${path}`);
+          console.warn(`Invalid monster data:`, monster);
           errorCount++;
           continue;
         }
@@ -69,15 +67,15 @@ export async function loadMonstersIntoDB() {
         currentBatch.push(processedMonster);
         
         // When batch is full or this is the last item, process the batch
-        if (currentBatch.length >= BATCH_SIZE || processedCount === totalFiles - 1) {
+        if (currentBatch.length >= BATCH_SIZE || processedCount === totalMonsters - 1) {
           await processBatch(db, currentBatch);
-          console.log(`Processed batch of ${currentBatch.length} monsters. Total: ${processedCount + 1}/${totalFiles}`);
+          console.log(`Processed batch of ${currentBatch.length} monsters. Total: ${processedCount + 1}/${totalMonsters}`);
           currentBatch = [];
         }
         
         processedCount++;
       } catch (error) {
-        console.error(`Error processing monster from ${path}:`, error);
+        console.error(`Error processing monster:`, error);
         errorCount++;
       }
     }
@@ -90,18 +88,22 @@ export async function loadMonstersIntoDB() {
 
     // Verify the database contents
     const verifyTx = db.transaction(STORE_NAME, 'readonly');
-    const totalMonsters = await verifyTx.objectStore(STORE_NAME).count();
+    const totalMonstersInDB = await verifyTx.objectStore(STORE_NAME).count();
     await verifyTx.done;
 
     console.log('Database population complete:', {
-      totalFiles,
+      totalMonsters,
       processedCount,
       errorCount,
-      totalMonstersInDB: totalMonsters
+      totalMonstersInDB
     });
 
     if (errorCount > 0) {
       console.warn(`Completed with ${errorCount} errors`);
+    }
+
+    if (totalMonstersInDB !== totalMonsters) {
+      console.warn(`Warning: Database count (${totalMonstersInDB}) doesn't match monster count (${totalMonsters})`);
     }
 
     return db;

@@ -764,9 +764,11 @@ function App() {
             <Nav.Item>
               <Nav.Link eventKey="bestiary">Bestiary</Nav.Link>
             </Nav.Item>
+            {/* Temporarily disabled for performance testing
             <Nav.Item>
               <Nav.Link eventKey="spells">Spells</Nav.Link>
             </Nav.Item>
+            */}
           </Nav>
 
           <Tab.Content>
@@ -814,9 +816,11 @@ function App() {
             <Tab.Pane eventKey="bestiary">
               <BestiaryTab onAddCreature={handleAddCreature} />
             </Tab.Pane>
+            {/* Temporarily disabled for performance testing
             <Tab.Pane eventKey="spells">
               <SpellsTab onAddSpell={handleAddSpell} />
             </Tab.Pane>
+            */}
           </Tab.Content>
         </Tab.Container>
         
