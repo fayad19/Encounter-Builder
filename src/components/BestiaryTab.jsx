@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Form, Row, Col, Card, Spinner } from 'react-bootstrap';
-import { loadMonstersIntoDB, searchMonsters, isDatabasePopulated } from '../services/monsterDB';
+import { Container, Form, Row, Col, Card, Spinner, Alert, Button } from 'react-bootstrap';
+import { loadMonstersIntoDB, searchMonsters, isDatabasePopulated, getDatabaseStats } from '../services/monsterDB';
 import MonsterDetailModal from './MonsterDetailModal';
 
 function BestiaryTab({ onAddCreature }) {
@@ -8,23 +8,38 @@ function BestiaryTab({ onAddCreature }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [levelFilter, setLevelFilter] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [selectedMonster, setSelectedMonster] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [dbStats, setDbStats] = useState(null);
 
   // Initialize database on first load
   useEffect(() => {
     async function initializeDB() {
       try {
         setLoading(true);
+        setError(null);
+        
         const isPopulated = await isDatabasePopulated();
+        console.log('Is database populated?', isPopulated);
+        
         if (!isPopulated) {
+          console.log('Database not populated, loading monsters...');
           await loadMonstersIntoDB();
         }
+        
+        // Get database statistics
+        const stats = await getDatabaseStats();
+        console.log('Database stats:', stats);
+        setDbStats(stats);
+        
         // Initial search with empty filters
         const initialMonsters = await searchMonsters({});
+        console.log(`Loaded ${initialMonsters.length} monsters`);
         setMonsters(initialMonsters);
       } catch (error) {
         console.error('Error initializing database:', error);
+        setError(error.message);
       } finally {
         setLoading(false);
       }
@@ -32,6 +47,23 @@ function BestiaryTab({ onAddCreature }) {
 
     initializeDB();
   }, []);
+
+  const handleRetry = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      await loadMonstersIntoDB();
+      const stats = await getDatabaseStats();
+      setDbStats(stats);
+      const initialMonsters = await searchMonsters({});
+      setMonsters(initialMonsters);
+    } catch (error) {
+      console.error('Error retrying database initialization:', error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Handle search and filter changes
   useEffect(() => {
@@ -71,6 +103,36 @@ function BestiaryTab({ onAddCreature }) {
 
   return (
     <Container fluid>
+      {error && (
+        <Alert variant="danger" className="mb-3">
+          <Alert.Heading>Error Loading Monsters</Alert.Heading>
+          <p>{error}</p>
+          <Button variant="primary" onClick={handleRetry}>
+            Retry Loading Database
+          </Button>
+        </Alert>
+      )}
+
+      {dbStats && (
+        <Alert variant="info" className="mb-3">
+          <Alert.Heading>Database Statistics</Alert.Heading>
+          <p>Total Monsters: {dbStats.totalMonsters}</p>
+          <p>Database Version: {dbStats.version}</p>
+          {Object.entries(dbStats.levelDistribution).length > 0 && (
+            <div>
+              <p>Monsters by Level:</p>
+              <ul>
+                {Object.entries(dbStats.levelDistribution)
+                  .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                  .map(([level, count]) => (
+                    <li key={level}>Level {level}: {count} monsters</li>
+                  ))}
+              </ul>
+            </div>
+          )}
+        </Alert>
+      )}
+
       <Row className="mb-4">
         <Col md={8}>
           <Form.Group>
