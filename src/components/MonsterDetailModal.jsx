@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Modal, Table, Button } from 'react-bootstrap';
 import { getSpellBySlug, SPELL_NAME_MAPPING } from '../services/spellDB';
 import SharedSpellModal from './SharedSpellModal';
+import { extractResistancesFromRules } from '../utils/creatureConversion';
+import quickRefData from '../data/quickRef.json';
 
 function MonsterDetailModal({ monster, show, onHide, onImportToCreatures }) {
   const [selectedSpell, setSelectedSpell] = useState(null);
@@ -42,10 +44,44 @@ function MonsterDetailModal({ monster, show, onHide, onImportToCreatures }) {
     }
   };
 
+  // Helper: Map condition names to quickRefData Conditions
+  const conditionList = quickRefData.find(q => q.name === 'Conditions')?.list || [];
+  function linkifyConditions(text) {
+    if (!text) return text;
+    return text.replace(/@UUID\[Compendium\.pf2e\.conditionitems\.Item\.([A-Za-z]+)](\{([^}]+)\})?/g, (match, cond, _, label) => {
+      const condName = (label || cond).replace(/-/g, ' ');
+      const found = conditionList.find(c => c.name.toLowerCase() === condName.toLowerCase());
+      if (found) {
+        return `<a href='#' class='condition-link' data-condition='${found.name}'>${found.name}</a>`;
+      } else {
+        return label || cond;
+      }
+    });
+  }
+
   const convertMonsterToCreature = () => {
-    // Convert monster data to creature format
+    // Gather resistances from both attributes and rules
+    const attrResistances = monster.system.attributes.resistances?.map(res => ({
+      type: res.type,
+      value: res.value || '',
+      exceptions: res.exceptions || []
+    })) || [];
+    const ruleResistances = extractResistancesFromRules(monster).map(res => ({
+      type: res.type,
+      value: res.value || '',
+      exceptions: res.exceptions || []
+    }));
+    // Merge, avoiding duplicates (by type+value+exceptions)
+    const resistanceKey = r => `${r.type}-${r.value}-${(r.exceptions||[]).join(',')}`;
+    const allResistancesMap = new Map();
+    attrResistances.concat(ruleResistances).forEach(r => {
+      allResistancesMap.set(resistanceKey(r), r);
+    });
+    const allResistances = Array.from(allResistancesMap.values());
+
+    // Define the creature object first, so attacks can be added to it
     const creature = {
-      id: Date.now(), // Generate a new ID
+      id: Date.now(),
       name: monster.name,
       hp: monster.system.attributes.hp.max,
       maxHp: monster.system.attributes.hp.max,
@@ -56,14 +92,23 @@ function MonsterDetailModal({ monster, show, onHide, onImportToCreatures }) {
       will: monster.system.saves.will.value,
       level: monster.level,
       dc: monster.system.attributes.spellDC?.value || null,
-      attacks: []
+      attacks: [],
+      resistances: allResistances,
+      immunities: monster.system.attributes.immunities?.map(imm => ({
+        type: imm.type,
+        exceptions: imm.exceptions || []
+      })) || [],
+      weaknesses: monster.system.attributes.weaknesses?.map(weak => ({
+        type: weak.type,
+        value: weak.value || '',
+        exceptions: weak.exceptions || []
+      })) || []
     };
 
-    // Convert monster items (abilities and attacks) to creature attacks
+    // Now add attacks and spells to the creature.attacks array
     if (monster.items) {
       monster.items.forEach(item => {
         if (item.type === 'melee' || item.type === 'ranged') {
-          // Handle physical attacks
           creature.attacks.push({
             attackName: item.name,
             attackType: item.type,
@@ -76,21 +121,14 @@ function MonsterDetailModal({ monster, show, onHide, onImportToCreatures }) {
               .join(' plus ')
           });
         } else if (item.type === 'spell') {
-          // Determine if it's an attack spell or regular spell based on damage property
           const hasDirectDamage = item.system.damage && Object.keys(item.system.damage).length > 0;
           const spellType = hasDirectDamage ? 'spell' : 'regularSpell';
-          
-          // Helper function to get the correct spell name based on remaster status
           const getSpellName = (item) => {
-            // If this is a remastered monster, use the current name
             if (item.system.publication?.remaster) {
               return item.name;
             }
-            
-            // For non-remastered content, check if there's a remastered equivalent
             return SPELL_NAME_MAPPING[item.name] || item.name;
           };
-
           const spellAttack = {
             attackName: getSpellName(item),
             attackType: spellType,
@@ -98,44 +136,31 @@ function MonsterDetailModal({ monster, show, onHide, onImportToCreatures }) {
             actions: item.system.time?.value || '2',
             range: item.system.range?.value || '',
             description: processDescription(item.system.description?.value),
-            // Set targetOrArea based on whether the spell has an area
             targetOrArea: item.system.area ? 'area' : 'target',
-            // Add slug for spell identification
             slug: item.system.slug || ''
           };
-
-          // Add area information if present
           if (item.system.area) {
             spellAttack.area = `${item.system.area.value}-foot ${item.system.area.type}`;
             spellAttack.areaType = item.system.area.type;
           }
-
-          // Add save information if present
           if (item.system.defense?.save) {
             spellAttack.save = item.system.defense.save.statistic;
             if (item.system.defense.save.basic) {
               spellAttack.save += ' (basic)';
             }
           }
-
-          // Add damage information for attack spells
           if (hasDirectDamage) {
             const damageFormulas = Object.values(item.system.damage)
               .map(damage => `${damage.formula} ${damage.type}`)
               .join(' plus ');
             spellAttack.damage = damageFormulas;
           }
-
-          // Add duration if present
           if (item.system.duration?.value) {
             spellAttack.duration = item.system.duration.value;
           }
-
-          // Add targets if present
           if (item.system.target?.value) {
             spellAttack.targets = item.system.target.value;
           }
-
           creature.attacks.push(spellAttack);
         }
       });
@@ -157,7 +182,7 @@ function MonsterDetailModal({ monster, show, onHide, onImportToCreatures }) {
     return monster.items.map((item, index) => (
       <div key={index} className="mb-3">
         <h6>{item.name}</h6>
-        <div dangerouslySetInnerHTML={{ __html: item.system?.description?.value || '' }} />
+        <div dangerouslySetInnerHTML={{ __html: linkifyConditions(item.system?.description?.value || '') }} />
       </div>
     ));
   };
@@ -248,52 +273,6 @@ function MonsterDetailModal({ monster, show, onHide, onImportToCreatures }) {
         <p>{languages.join(', ')}</p>
       </div>
     );
-  };
-
-  const extractResistancesFromRules = (monster) => {
-    if (!monster.items) return [];
-    
-    const resistances = new Map(); // Use Map to avoid duplicates
-    const currentHpPercent = (monster.system.attributes.hp.value / monster.system.attributes.hp.max) * 100;
-    
-    monster.items.forEach(item => {
-      if (item.system?.rules) {
-        item.system.rules.forEach(rule => {
-          if (rule.key === 'Resistance') {
-            // Check if the resistance applies based on HP predicate
-            const hpPredicate = rule.predicate?.find(p => p.lt || p.gte);
-            if (hpPredicate) {
-              const threshold = hpPredicate.lt ? hpPredicate.lt[1] : hpPredicate.gte[1];
-              const isAbove = hpPredicate.gte !== undefined;
-              const isBelow = hpPredicate.lt !== undefined;
-              
-              // Only include if the HP condition is met
-              if ((isAbove && currentHpPercent >= threshold) || 
-                  (isBelow && currentHpPercent < threshold)) {
-                const key = `${rule.type}-${rule.value}`;
-                resistances.set(key, {
-                  type: rule.type,
-                  value: rule.value,
-                  exceptions: rule.exceptions || [],
-                  predicate: rule.predicate
-                });
-              }
-            } else {
-              // If no HP predicate, always include
-              const key = `${rule.type}-${rule.value}`;
-              resistances.set(key, {
-                type: rule.type,
-                value: rule.value,
-                exceptions: rule.exceptions || [],
-                predicate: rule.predicate
-              });
-            }
-          }
-        });
-      }
-    });
-    
-    return Array.from(resistances.values());
   };
 
   const formatResistanceText = (res) => {

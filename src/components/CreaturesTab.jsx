@@ -105,7 +105,7 @@ function CreaturesTab({
   const handleAddImmunity = () => {
     setNewCreature(prev => ({
       ...prev,
-      immunities: [...prev.immunities, '']
+      immunities: [...prev.immunities, { type: '', exceptions: [] }]
     }));
   };
 
@@ -151,7 +151,10 @@ function CreaturesTab({
 
   const handleImmunityChange = (index, value) => {
     const updatedImmunities = [...newCreature.immunities];
-    updatedImmunities[index] = value;
+    updatedImmunities[index] = {
+      ...updatedImmunities[index],
+      type: value
+    };
     setNewCreature(prev => ({
       ...prev,
       immunities: updatedImmunities
@@ -460,7 +463,7 @@ function CreaturesTab({
                             <Col md={10}>
                               <Form.Control
                                 type="text"
-                                value={immunity}
+                                value={typeof immunity === 'string' ? immunity : immunity.type}
                                 onChange={(e) => handleImmunityChange(index, e.target.value)}
                                 placeholder="Immunity type (e.g., Fire, Poison)"
                               />

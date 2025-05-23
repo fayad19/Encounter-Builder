@@ -10,6 +10,7 @@ import action2 from '../assets/action-2.png';
 import action3 from '../assets/action-3.png';
 import freeAction from '../assets/action-free.png';
 import CreatureAttackForm from './CreatureAttackForm';
+import { calculateCurrentResistances } from '../utils/creatureConversion';
 
 // Add PersistentDamageDialog component
 function PersistentDamageDialog({ show, onHide, onConfirm, onCancel, damageType, damageValue }) {
@@ -844,6 +845,13 @@ function BattleTab({
     if (totalDamage > 0 && onUpdateParticipantHP) {
       const newHp = Math.max(0, Number(participant.hp) - totalDamage);
       onUpdateParticipantHP(participant.battleId, newHp);
+      // Recalculate resistances after HP change
+      const updatedParticipant = { ...participant, hp: newHp };
+      const updatedResistances = calculateCurrentResistances(updatedParticipant);
+      onUpdateBattleParticipant({
+        ...updatedParticipant,
+        resistances: updatedResistances
+      });
     }
 
     // Show removal check dialog for each instance
@@ -1109,10 +1117,11 @@ function BattleTab({
                                       {participant.resistances && participant.resistances.length > 0 && (
                                         <div className="mt-2">
                                           <strong>Resistances:</strong>
-                                          <ul className="mb-0 ps-3">
+                                          <ul className={participant.resistances.length > 2 ? "mb-0 ps-3 d-flex flex-wrap gap-2 list-unstyled flex-row" : "mb-0 ps-3"}>
                                             {participant.resistances.map((resistance, i) => (
-                                              <li key={`${participant.battleId}-resistance-${i}`} style={{ listStyleType: 'disc' }}>
+                                              <li key={`${participant.battleId}-resistance-${i}`} style={{ listStyleType: participant.resistances.length > 2 ? 'none' : 'disc' }}>
                                                 {resistance.type} {resistance.value}
+                                                {participant.resistances.length > 2 && i < participant.resistances.length - 1 ? ',' : ''}
                                               </li>
                                             ))}
                                           </ul>
@@ -1121,10 +1130,13 @@ function BattleTab({
                                       {participant.immunities && participant.immunities.length > 0 && (
                                         <div className="mt-2">
                                           <strong>Immunities:</strong>
-                                          <ul className="mb-0 ps-3">
+                                          <ul className={participant.immunities.length > 2 ? "mb-0 ps-3 d-flex flex-wrap gap-2 list-unstyled flex-row" : "mb-0 ps-3"}>
                                             {participant.immunities.map((immunity, i) => (
-                                              <li key={`${participant.battleId}-immunity-${i}`} style={{ listStyleType: 'disc' }}>
-                                                {immunity}
+                                              <li key={`${participant.battleId}-immunity-${i}`} style={{ listStyleType: participant.immunities.length > 2 ? 'none' : 'disc' }}>
+                                                {typeof immunity === 'string' ? immunity : immunity.type}
+                                                {typeof immunity === 'object' && immunity.exceptions && immunity.exceptions.length > 0 && 
+                                                  ` (except ${immunity.exceptions.join(', ')})`}
+                                                {participant.immunities.length > 2 && i < participant.immunities.length - 1 ? ',' : ''}
                                               </li>
                                             ))}
                                           </ul>
@@ -1133,10 +1145,11 @@ function BattleTab({
                                       {participant.weaknesses && participant.weaknesses.length > 0 && (
                                         <div className="mt-2">
                                           <strong>Weaknesses:</strong>
-                                          <ul className="mb-0 ps-3">
+                                          <ul className={participant.weaknesses.length > 2 ? "mb-0 ps-3 d-flex flex-wrap gap-2 list-unstyled flex-row" : "mb-0 ps-3"}>
                                             {participant.weaknesses.map((weakness, i) => (
-                                              <li key={`${participant.battleId}-weakness-${i}`} style={{ listStyleType: 'disc' }}>
+                                              <li key={`${participant.battleId}-weakness-${i}`} style={{ listStyleType: participant.weaknesses.length > 2 ? 'none' : 'disc' }}>
                                                 {weakness.type} {weakness.value}
+                                                {participant.weaknesses.length > 2 && i < participant.weaknesses.length - 1 ? ',' : ''}
                                               </li>
                                             ))}
                                           </ul>

@@ -10,6 +10,8 @@ import fillipBg from './assets/fillip.jpg';
 import SpellsTab from './components/SpellsTab';
 import { loadMonstersIntoDB, isDatabasePopulated as isMonsterDBPopulated } from './services/monsterDB';
 import { loadSpellsIntoDB, isDatabasePopulated as isSpellDBPopulated } from './services/spellDB';
+import { calculateCurrentResistances } from './utils/creatureConversion';
+import quickRefData from './data/quickRef.json';
 
 function App() {
   const audioRef = useRef(null);
@@ -142,6 +144,10 @@ function App() {
 
   // Add state for last added initiative
   const [lastAddedInitiative, setLastAddedInitiative] = useState(null);
+
+  // Add state for References tab
+  const [referencesMenu, setReferencesMenu] = useState('Conditions');
+  const [selectedReference, setSelectedReference] = useState(null);
 
   // Save to localStorage whenever state changes
   useEffect(() => {
@@ -551,32 +557,16 @@ function App() {
     const clampedHP = Math.min(maxHp, Math.max(0, Number(newHP)));
     
     setBattleParticipants(prev => {
-      const updated = prev.map(p => {
+      return prev.map(p => {
         if (p.battleId === battleId) {
-          // Only update hp, do not touch maxHp
-          return { ...p, hp: clampedHP };
+          let updated = { ...p, hp: clampedHP };
+          if (updated.type === 'creature') {
+            updated.resistances = calculateCurrentResistances({ ...updated, hp: clampedHP });
+          }
+          return updated;
         }
         return p;
       });
-      // Sort by initiative after any updates
-      const sorted = [...updated].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
-      // If we're updating a player's HP to 0, we need to ensure they're in the right position and update their initiative
-      const updatedPlayer = sorted.find(p => p.battleId === battleId);
-      if (updatedPlayer?.type === 'player' && clampedHP === 0) {
-        // Find the highest creature initiative
-        const highestCreature = sorted.find(p => p.type === 'creature');
-        if (highestCreature) {
-          // Update player's initiative to highest creature initiative + 1
-          const newInitiative = (highestCreature.initiative || 0) + 1;
-          updatedPlayer.initiative = newInitiative;
-          // Move the player right after the highest creature
-          const withoutPlayer = sorted.filter(p => p.battleId !== battleId);
-          const creatureIndex = withoutPlayer.findIndex(p => p.battleId === highestCreature.battleId);
-          withoutPlayer.splice(creatureIndex + 1, 0, updatedPlayer);
-          return withoutPlayer;
-        }
-      }
-      return sorted;
     });
   };
 
@@ -587,13 +577,16 @@ function App() {
     const clampedTempHP = Math.max(0, Number(tempHP));
     
     setBattleParticipants(prev => {
-      const updated = prev.map(p => {
+      return prev.map(p => {
         if (p.battleId === battleId) {
-          return { ...p, tempHp: clampedTempHP };
+          let updated = { ...p, tempHp: clampedTempHP };
+          if (updated.type === 'creature') {
+            updated.resistances = calculateCurrentResistances(updated);
+          }
+          return updated;
         }
         return p;
       });
-      return [...updated].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
     });
   };
 
@@ -766,6 +759,32 @@ function App() {
     initializeDatabases();
   }, []);
 
+  // Helper to get submenu list
+  const getReferenceList = () => {
+    const section = quickRefData.find(q => q.name === referencesMenu);
+    return section ? section.list : [];
+  };
+
+  // Helper: Map condition names to quickRefData Conditions
+  const conditionList = quickRefData.find(q => q.name === 'Conditions')?.list || [];
+  const conditionNames = conditionList.map(c => c.name.toLowerCase());
+
+  function linkifyConditions(text) {
+    if (!text) return text;
+    // Replace @UUID[Compendium.pf2e.conditionitems.Item.X] or {...} with a link
+    return text.replace(/@UUID\[Compendium\.pf2e\.conditionitems\.Item\.([A-Za-z]+)](\{([^}]+)\})?/g, (match, cond, _, label) => {
+      // Try to match the condition name (case-insensitive)
+      const condName = (label || cond).replace(/-/g, ' ');
+      const found = conditionList.find(c => c.name.toLowerCase() === condName.toLowerCase());
+      if (found) {
+        return `<a href="#" class="condition-link" data-condition="${found.name}">${found.name}</a>`;
+      } else {
+        // Fallback: just show the label or cond
+        return label || cond;
+      }
+    });
+  }
+
   return (
     <div className="d-flex flex-column min-vh-100">
       <Container fluid className="mt-3 flex-grow-1">
@@ -799,6 +818,9 @@ function App() {
             </Nav.Item>
             <Nav.Item>
               <Nav.Link eventKey="spells">Spells</Nav.Link>
+            </Nav.Item>
+            <Nav.Item>
+              <Nav.Link eventKey="references">References</Nav.Link>
             </Nav.Item>
           </Nav>
 
@@ -849,6 +871,45 @@ function App() {
             </Tab.Pane>
             <Tab.Pane eventKey="spells">
               <SpellsTab onAddSpell={handleAddSpell} />
+            </Tab.Pane>
+            <Tab.Pane eventKey="references">
+              <div className="mb-3 d-flex gap-2">
+                {['Conditions', 'Weapon Traits', 'Crit Specialization'].map(menu => (
+                  <Button
+                    key={menu}
+                    variant={referencesMenu === menu ? 'primary' : 'outline-primary'}
+                    onClick={() => { setReferencesMenu(menu); setSelectedReference(null); }}
+                  >
+                    {menu}
+                  </Button>
+                ))}
+              </div>
+              <div className="row">
+                <div className="col-md-4">
+                  <ul className="list-group">
+                    {getReferenceList().map(item => (
+                      <li
+                        key={item.name}
+                        className={`list-group-item${selectedReference && selectedReference.name === item.name ? ' active' : ''}`}
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => setSelectedReference(item)}
+                      >
+                        {item.name}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="col-md-8">
+                  {selectedReference && (
+                    <div className="card">
+                      <div className="card-body">
+                        <h5 className="card-title">{selectedReference.name}</h5>
+                        <p className="card-text" dangerouslySetInnerHTML={{ __html: linkifyConditions(selectedReference.description) }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </Tab.Pane>
           </Tab.Content>
         </Tab.Container>
