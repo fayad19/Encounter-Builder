@@ -8,6 +8,8 @@ import InitiativeDialog from './components/InitiativeDialog';
 import fillip from './assets/fillip.mp3';
 import fillipBg from './assets/fillip.jpg';
 import SpellsTab from './components/SpellsTab';
+import { loadMonstersIntoDB, isDatabasePopulated as isMonsterDBPopulated } from './services/monsterDB';
+import { loadSpellsIntoDB, isDatabasePopulated as isSpellDBPopulated } from './services/spellDB';
 
 function App() {
   const audioRef = useRef(null);
@@ -733,6 +735,37 @@ function App() {
     setCreatures(prev => [...prev, spellAttack]);
   };
 
+  // Initialize databases on component mount
+  useEffect(() => {
+    const initializeDatabases = async () => {
+      try {
+        // Initialize monster database
+        const isMonsterPopulated = await isMonsterDBPopulated();
+        if (!isMonsterPopulated) {
+          console.log('Initializing monster database...');
+          await loadMonstersIntoDB();
+          console.log('Monster database initialized successfully');
+        } else {
+          console.log('Monster database already populated');
+        }
+
+        // Initialize spell database
+        const isSpellPopulated = await isSpellDBPopulated();
+        if (!isSpellPopulated) {
+          console.log('Initializing spell database...');
+          await loadSpellsIntoDB();
+          console.log('Spell database initialized successfully');
+        } else {
+          console.log('Spell database already populated');
+        }
+      } catch (error) {
+        console.error('Error initializing databases:', error);
+      }
+    };
+
+    initializeDatabases();
+  }, []);
+
   return (
     <div className="d-flex flex-column min-vh-100">
       <Container fluid className="mt-3 flex-grow-1">
@@ -764,11 +797,9 @@ function App() {
             <Nav.Item>
               <Nav.Link eventKey="bestiary">Bestiary</Nav.Link>
             </Nav.Item>
-            {/* Temporarily disabled for performance testing
             <Nav.Item>
               <Nav.Link eventKey="spells">Spells</Nav.Link>
             </Nav.Item>
-            */}
           </Nav>
 
           <Tab.Content>
@@ -816,11 +847,9 @@ function App() {
             <Tab.Pane eventKey="bestiary">
               <BestiaryTab onAddCreature={handleAddCreature} />
             </Tab.Pane>
-            {/* Temporarily disabled for performance testing
             <Tab.Pane eventKey="spells">
               <SpellsTab onAddSpell={handleAddSpell} />
             </Tab.Pane>
-            */}
           </Tab.Content>
         </Tab.Container>
         

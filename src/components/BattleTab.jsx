@@ -33,6 +33,25 @@ function PersistentDamageDialog({ show, onHide, onConfirm, onCancel, damageType,
   );
 }
 
+// Add this helper function before the BattleTab function
+function renderSpellDescription(rawDescription) {
+  if (!rawDescription) return null;
+  // Replace @UUID[...] with the text inside {...}
+  let processed = rawDescription.replace(/@UUID\[[^\]]*\]\{([^}]*)\}/g, '$1');
+  // Bold the keywords at the start of lines or after <p>
+  processed = processed.replace(/(>|^)(Critical Success|Success|Failure|Critical Failure)(:|\s)/g, (match, p1, p2, p3) => `${p1}<strong>${p2}</strong>${p3}`);
+  // If it doesn't look like HTML, add <p> for each line
+  if (!/<[a-z][\s\S]*>/i.test(processed)) {
+    processed = processed
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .map(line => `<p>${line}</p>`)
+      .join('');
+  }
+  return <div dangerouslySetInnerHTML={{ __html: processed }} />;
+}
+
 function BattleTab({
   participants = [],
   onStartBattle,
@@ -63,6 +82,7 @@ function BattleTab({
   const [hpInputValues, setHpInputValues] = useState({});
   const [tempHpInputValues, setTempHpInputValues] = useState({});
   const [showConditionsMenu, setShowConditionsMenu] = useState(true);
+  const [expandedSpells, setExpandedSpells] = useState({});
   const [persistentDamageDialog, setPersistentDamageDialog] = useState({
     show: false,
     participantId: null,
@@ -1083,6 +1103,48 @@ function BattleTab({
                                     </div>
                                   </div>
 
+                                  {/* Add Resistances, Immunities, and Weaknesses display */}
+                                  {participant.type === 'creature' && (
+                                    <>
+                                      {participant.resistances && participant.resistances.length > 0 && (
+                                        <div className="mt-2">
+                                          <strong>Resistances:</strong>
+                                          <ul className="mb-0 ps-3">
+                                            {participant.resistances.map((resistance, i) => (
+                                              <li key={`${participant.battleId}-resistance-${i}`} style={{ listStyleType: 'disc' }}>
+                                                {resistance.type} {resistance.value}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+                                      {participant.immunities && participant.immunities.length > 0 && (
+                                        <div className="mt-2">
+                                          <strong>Immunities:</strong>
+                                          <ul className="mb-0 ps-3">
+                                            {participant.immunities.map((immunity, i) => (
+                                              <li key={`${participant.battleId}-immunity-${i}`} style={{ listStyleType: 'disc' }}>
+                                                {immunity}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+                                      {participant.weaknesses && participant.weaknesses.length > 0 && (
+                                        <div className="mt-2">
+                                          <strong>Weaknesses:</strong>
+                                          <ul className="mb-0 ps-3">
+                                            {participant.weaknesses.map((weakness, i) => (
+                                              <li key={`${participant.battleId}-weakness-${i}`} style={{ listStyleType: 'disc' }}>
+                                                {weakness.type} {weakness.value}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
+
                                   {participant.attacks && Array.isArray(participant.attacks) && participant.attacks.length > 0 && (
                                     <div>
                                       {/* Melee Attacks Section */}
@@ -1185,41 +1247,154 @@ function BattleTab({
                                           </ul>
                                         </div>
                                       )}
+                                      {/* Innate Spells Section */}
+                                      {participant.attacks.some(atk => (atk.attackCategory || atk.attackType) === 'innateSpell') && (
+                                        <div className="mt-2">
+                                          <strong>Innate Spells:</strong>
+                                          <ul className="mb-0 ps-3">
+                                            {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'innateSpell').map((atk, i) => {
+                                              const spellKey = `${participant.battleId}-innate-${i}`;
+                                              const isExpanded = expandedSpells[spellKey];
+                                              return (
+                                                <li key={`${participant.battleId}-innateSpell-${i}`} style={{ listStyleType: 'disc' }}>
+                                                  <div 
+                                                    className="d-flex align-items-center" 
+                                                    style={{ cursor: 'pointer' }}
+                                                    onClick={() => setExpandedSpells(prev => ({
+                                                      ...prev,
+                                                      [spellKey]: !prev[spellKey]
+                                                    }))}
+                                                  >
+                                                    <span className="text-muted"></span>
+                                                    {atk.attackName && (
+                                                      <strong style={{ marginLeft: 4 }}>
+                                                        {atk.attackName}
+                                                        {atk.description && (
+                                                          <span className="ms-2" style={{ fontSize: '0.8em', color: '#666' }}>
+                                                            {isExpanded ? '▼' : '▶'}
+                                                          </span>
+                                                        )}
+                                                      </strong>
+                                                    )}
+                                                    {(() => {
+                                                      let icon = null;
+                                                      if (atk.actions === '1') icon = action1;
+                                                      else if (atk.actions === '2') icon = action2;
+                                                      else if (atk.actions === '3') icon = action3;
+                                                      else if (atk.actions === 'free') icon = freeAction;
+                                                      if (icon) {
+                                                        return (
+                                                          <img
+                                                            src={icon}
+                                                            alt={`${atk.actions} action(s)`}
+                                                            style={{ height: '1.2em', verticalAlign: 'middle', marginLeft: 8, marginRight: 4 }}
+                                                          />
+                                                        );
+                                                      }
+                                                      return null;
+                                                    })()}
+                                                    {atk.targetOrArea === 'target' && atk.targetCount && <span>, Targets: {atk.targetCount}</span>}
+                                                    {atk.targetOrArea === 'area' && atk.areaType && <span>, Area: {atk.areaType}</span>}
+                                                    {atk.range && <span>, Range: {atk.range}</span>}
+                                                    {atk.attackOrSave === 'attack' && (
+                                                      <>
+                                                        <span>, Attack Modifier: </span>
+                                                        {renderStat(participant, 'firstHitModifier', atk.attackModifier, atk)}
+                                                      </>
+                                                    )}
+                                                    {atk.attackOrSave === 'save' && <span>, Save: {atk.saveType || ''} DC {renderStat(participant, 'dc', atk.attackModifier)}</span>}
+                                                    {atk.damage && [
+                                                      <span>, Damage: </span>,
+                                                      <span>{renderStat(participant, 'meleeDamage', atk.damage, atk)}</span>
+                                                    ]}
+                                                  </div>
+                                                  {isExpanded && atk.description && (
+                                                    <div 
+                                                      className="mt-1 mb-1" 
+                                                      style={{ 
+                                                        marginLeft: 24, 
+                                                        padding: '8px',
+                                                        backgroundColor: '#f8f9fa',
+                                                        borderRadius: '4px',
+                                                        border: '1px solid #dee2e6'
+                                                      }}
+                                                    >
+                                                      {renderSpellDescription(atk.description)}
+                                                    </div>
+                                                  )}
+                                                </li>
+                                              );
+                                            })}
+                                          </ul>
+                                        </div>
+                                      )}
                                       {/* Regular Spells Section */}
                                       {participant.attacks.some(atk => (atk.attackCategory || atk.attackType) === 'regularSpell') && (
                                         <div className="mt-2">
                                           <strong>Regular Spells:</strong>
                                           <ul className="mb-0 ps-3">
-                                            {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'regularSpell').map((atk, i) => (
-                                              <li key={`${participant.battleId}-regularSpell-${i}`} style={{ listStyleType: 'circle' }}>
-                                                <span key={`regularSpell-text-${i}`} className="text-muted"></span>
-                                                {atk.attackName && <strong key={`regularSpell-name-${i}`} style={{ marginLeft: 4 }}>{atk.attackName}</strong>}
-                                                {(() => {
-                                                  let icon = null;
-                                                  if (atk.actions === '1') icon = action1;
-                                                  else if (atk.actions === '2') icon = action2;
-                                                  else if (atk.actions === '3') icon = action3;
-                                                  else if (atk.actions === 'free') icon = freeAction;
-                                                  if (icon) {
-                                                    return (
-                                                      <img
-                                                        key={`regularSpell-icon-${i}`}
-                                                        src={icon}
-                                                        alt={`${atk.actions} action(s)`}
-                                                        style={{ height: '1.2em', verticalAlign: 'middle', marginLeft: 8, marginRight: 4 }}
-                                                      />
-                                                    );
-                                                  }
-                                                  return null;
-                                                })()}
-                                                {atk.range && <span key={`regularSpell-range-${i}`}>, Range: {atk.range}</span>}
-                                                {atk.targets && <span key={`regularSpell-targets-${i}`}>, Targets: {atk.targets}</span>}
-                                                {atk.duration && <span key={`regularSpell-duration-${i}`}>, Duration: {atk.duration}</span>}
-                                                {atk.description && (
-                                                  <div key={`regularSpell-desc-${i}`} style={{ marginLeft: 24, marginTop: 2 }}>{atk.description}</div>
-                                                )}
-                                              </li>
-                                            ))}
+                                            {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'regularSpell').map((atk, i) => {
+                                              const spellKey = `${participant.battleId}-${i}`;
+                                              const isExpanded = expandedSpells[spellKey];
+                                              return (
+                                                <li key={`${participant.battleId}-regularSpell-${i}`} style={{ listStyleType: 'circle' }}>
+                                                  <div 
+                                                    className="d-flex align-items-center" 
+                                                    style={{ cursor: 'pointer' }}
+                                                    onClick={() => setExpandedSpells(prev => ({
+                                                      ...prev,
+                                                      [spellKey]: !prev[spellKey]
+                                                    }))}
+                                                  >
+                                                    <span className="text-muted"></span>
+                                                    {atk.attackName && (
+                                                      <strong style={{ marginLeft: 4 }}>
+                                                        {atk.attackName}
+                                                        {atk.description && (
+                                                          <span className="ms-2" style={{ fontSize: '0.8em', color: '#666' }}>
+                                                            {isExpanded ? '▼' : '▶'}
+                                                          </span>
+                                                        )}
+                                                      </strong>
+                                                    )}
+                                                    {(() => {
+                                                      let icon = null;
+                                                      if (atk.actions === '1') icon = action1;
+                                                      else if (atk.actions === '2') icon = action2;
+                                                      else if (atk.actions === '3') icon = action3;
+                                                      else if (atk.actions === 'free') icon = freeAction;
+                                                      if (icon) {
+                                                        return (
+                                                          <img
+                                                            src={icon}
+                                                            alt={`${atk.actions} action(s)`}
+                                                            style={{ height: '1.2em', verticalAlign: 'middle', marginLeft: 8, marginRight: 4 }}
+                                                          />
+                                                        );
+                                                      }
+                                                      return null;
+                                                    })()}
+                                                    {atk.range && <span>, Range: {atk.range}</span>}
+                                                    {atk.targets && <span>, Targets: {atk.targets}</span>}
+                                                    {atk.duration && <span>, Duration: {atk.duration}</span>}
+                                                  </div>
+                                                  {isExpanded && atk.description && (
+                                                    <div 
+                                                      className="mt-1 mb-1" 
+                                                      style={{ 
+                                                        marginLeft: 24, 
+                                                        padding: '8px',
+                                                        backgroundColor: '#f8f9fa',
+                                                        borderRadius: '4px',
+                                                        border: '1px solid #dee2e6'
+                                                      }}
+                                                    >
+                                                      {renderSpellDescription(atk.description)}
+                                                    </div>
+                                                  )}
+                                                </li>
+                                              );
+                                            })}
                                           </ul>
                                         </div>
                                       )}
@@ -1500,10 +1675,143 @@ function BattleTab({
                           <input type="number" className="form-control" value={creatureToEdit.will} onChange={e => handleEditCreatureChange('will', e.target.value)} />
                         </div>
                       </div>
-                      {/* <div className="mb-3">
-                        <label className="form-label">Penalty</label>
-                        <input type="number" className="form-control" value={creatureToEdit.penalty || ''} onChange={e => handleEditCreatureChange('penalty', e.target.value)} />
-                      </div> */}
+                      <div className="row">
+                        <div className="col-md-12 mb-3">
+                          <div className="d-flex justify-content-between align-items-center mb-2">
+                            <h6 className="mb-0">Resistances</h6>
+                            <Button variant="outline-primary" size="sm" onClick={() => setCreatureToEdit(prev => ({ ...prev, resistances: [...(prev.resistances || []), { type: '', value: '' }] }))}>
+                              <Plus /> Add Resistance
+                            </Button>
+                          </div>
+                          {creatureToEdit.resistances && creatureToEdit.resistances.map((resistance, index) => (
+                            <div key={index} className="row mb-2">
+                              <div className="col-md-5">
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  value={resistance.type}
+                                  onChange={e => {
+                                    const updatedResistances = [...creatureToEdit.resistances];
+                                    updatedResistances[index] = { ...updatedResistances[index], type: e.target.value };
+                                    setCreatureToEdit(prev => ({ ...prev, resistances: updatedResistances }));
+                                  }}
+                                  placeholder="Resistance type (e.g., Fire)"
+                                />
+                              </div>
+                              <div className="col-md-5">
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  value={resistance.value}
+                                  onChange={e => {
+                                    const updatedResistances = [...creatureToEdit.resistances];
+                                    updatedResistances[index] = { ...updatedResistances[index], value: e.target.value };
+                                    setCreatureToEdit(prev => ({ ...prev, resistances: updatedResistances }));
+                                  }}
+                                  placeholder="Value (e.g., 5)"
+                                />
+                              </div>
+                              <div className="col-md-2">
+                                <Button
+                                  variant="outline-danger"
+                                  size="sm"
+                                  onClick={() => setCreatureToEdit(prev => ({ ...prev, resistances: prev.resistances.filter((_, i) => i !== index) }))}
+                                >
+                                  <Trash />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="row">
+                        <div className="col-md-12 mb-3">
+                          <div className="d-flex justify-content-between align-items-center mb-2">
+                            <h6 className="mb-0">Immunities</h6>
+                            <Button variant="outline-primary" size="sm" onClick={() => setCreatureToEdit(prev => ({ ...prev, immunities: [...(prev.immunities || []), ''] }))}>
+                              <Plus /> Add Immunity
+                            </Button>
+                          </div>
+                          {creatureToEdit.immunities && creatureToEdit.immunities.map((immunity, index) => (
+                            <div key={index} className="row mb-2">
+                              <div className="col-md-10">
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  value={immunity}
+                                  onChange={e => {
+                                    const updatedImmunities = [...creatureToEdit.immunities];
+                                    updatedImmunities[index] = e.target.value;
+                                    setCreatureToEdit(prev => ({ ...prev, immunities: updatedImmunities }));
+                                  }}
+                                  placeholder="Immunity type (e.g., Fire, Poison)"
+                                />
+                              </div>
+                              <div className="col-md-2">
+                                <Button
+                                  variant="outline-danger"
+                                  size="sm"
+                                  onClick={() => setCreatureToEdit(prev => ({ ...prev, immunities: prev.immunities.filter((_, i) => i !== index) }))}
+                                >
+                                  <Trash />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="row">
+                        <div className="col-md-12 mb-3">
+                          <div className="d-flex justify-content-between align-items-center mb-2">
+                            <h6 className="mb-0">Weaknesses</h6>
+                            <Button variant="outline-primary" size="sm" onClick={() => setCreatureToEdit(prev => ({ ...prev, weaknesses: [...(prev.weaknesses || []), { type: '', value: '' }] }))}>
+                              <Plus /> Add Weakness
+                            </Button>
+                          </div>
+                          {creatureToEdit.weaknesses && creatureToEdit.weaknesses.map((weakness, index) => (
+                            <div key={index} className="row mb-2">
+                              <div className="col-md-5">
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  value={weakness.type}
+                                  onChange={e => {
+                                    const updatedWeaknesses = [...creatureToEdit.weaknesses];
+                                    updatedWeaknesses[index] = { ...updatedWeaknesses[index], type: e.target.value };
+                                    setCreatureToEdit(prev => ({ ...prev, weaknesses: updatedWeaknesses }));
+                                  }}
+                                  placeholder="Weakness type (e.g., Fire)"
+                                />
+                              </div>
+                              <div className="col-md-5">
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  value={weakness.value}
+                                  onChange={e => {
+                                    const updatedWeaknesses = [...creatureToEdit.weaknesses];
+                                    updatedWeaknesses[index] = { ...updatedWeaknesses[index], value: e.target.value };
+                                    setCreatureToEdit(prev => ({ ...prev, weaknesses: updatedWeaknesses }));
+                                  }}
+                                  placeholder="Value (e.g., 5)"
+                                />
+                              </div>
+                              <div className="col-md-2">
+                                <Button
+                                  variant="outline-danger"
+                                  size="sm"
+                                  onClick={() => setCreatureToEdit(prev => ({ ...prev, weaknesses: prev.weaknesses.filter((_, i) => i !== index) }))}
+                                >
+                                  <Trash />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
                       <div className="mb-3">
                         <div className="d-flex justify-content-between align-items-center mb-2">
                           <h6 className="mb-0">Attacks</h6>

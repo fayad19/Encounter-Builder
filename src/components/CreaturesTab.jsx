@@ -22,7 +22,10 @@ function CreaturesTab({
     reflex: '',
     will: '',
     penalty: '',
-    attacks: [] // Start with no attacks
+    attacks: [], // Start with no attacks
+    resistances: [], // Add resistances array
+    immunities: [], // Add immunities array
+    weaknesses: [] // Add weaknesses array
   });
   const [editingCreature, setEditingCreature] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -92,6 +95,81 @@ function CreaturesTab({
     }));
   };
 
+  const handleAddResistance = () => {
+    setNewCreature(prev => ({
+      ...prev,
+      resistances: [...prev.resistances, { type: '', value: '' }]
+    }));
+  };
+
+  const handleAddImmunity = () => {
+    setNewCreature(prev => ({
+      ...prev,
+      immunities: [...prev.immunities, '']
+    }));
+  };
+
+  const handleAddWeakness = () => {
+    setNewCreature(prev => ({
+      ...prev,
+      weaknesses: [...prev.weaknesses, { type: '', value: '' }]
+    }));
+  };
+
+  const handleRemoveResistance = (index) => {
+    setNewCreature(prev => ({
+      ...prev,
+      resistances: prev.resistances.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleRemoveImmunity = (index) => {
+    setNewCreature(prev => ({
+      ...prev,
+      immunities: prev.immunities.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleRemoveWeakness = (index) => {
+    setNewCreature(prev => ({
+      ...prev,
+      weaknesses: prev.weaknesses.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleResistanceChange = (index, field, value) => {
+    const updatedResistances = [...newCreature.resistances];
+    updatedResistances[index] = {
+      ...updatedResistances[index],
+      [field]: value
+    };
+    setNewCreature(prev => ({
+      ...prev,
+      resistances: updatedResistances
+    }));
+  };
+
+  const handleImmunityChange = (index, value) => {
+    const updatedImmunities = [...newCreature.immunities];
+    updatedImmunities[index] = value;
+    setNewCreature(prev => ({
+      ...prev,
+      immunities: updatedImmunities
+    }));
+  };
+
+  const handleWeaknessChange = (index, field, value) => {
+    const updatedWeaknesses = [...newCreature.weaknesses];
+    updatedWeaknesses[index] = {
+      ...updatedWeaknesses[index],
+      [field]: value
+    };
+    setNewCreature(prev => ({
+      ...prev,
+      weaknesses: updatedWeaknesses
+    }));
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (newCreature.name) {
@@ -110,7 +188,10 @@ function CreaturesTab({
         ac: '',
         //initiative: '',
         penalty: '',
-        attacks: []
+        attacks: [],
+        resistances: [],
+        immunities: [],
+        weaknesses: []
       });
     }
   };
@@ -127,7 +208,10 @@ function CreaturesTab({
       level: creature.level || '',
       dc: creature.dc || '',
       penalty: creature.penalty || '',
-      attacks: creature.attacks || []
+      attacks: creature.attacks || [],
+      resistances: creature.resistances || [],
+      immunities: creature.immunities || [],
+      weaknesses: creature.weaknesses || []
     });
     setEditingCreature(creature);
   };
@@ -140,7 +224,10 @@ function CreaturesTab({
       ac: '',
       //initiative: '',
       penalty: '',
-      attacks: []
+      attacks: [],
+      resistances: [],
+      immunities: [],
+      weaknesses: []
     });
   };
 
@@ -317,6 +404,119 @@ function CreaturesTab({
                   </Col>
                 </Row>
                 */}
+                {/* Add after the Will save field and before the Attacks section */}
+                <Row className="mb-3">
+                  <Col md={12}>
+                    <Card>
+                      <Card.Header className="d-flex justify-content-between align-items-center">
+                        <h6 className="mb-0">Resistances</h6>
+                        <Button variant="outline-primary" size="sm" onClick={handleAddResistance}>
+                          <Plus /> Add Resistance
+                        </Button>
+                      </Card.Header>
+                      <Card.Body>
+                        {newCreature.resistances.map((resistance, index) => (
+                          <Row key={index} className="mb-2">
+                            <Col md={5}>
+                              <Form.Control
+                                type="text"
+                                value={resistance.type}
+                                onChange={(e) => handleResistanceChange(index, 'type', e.target.value)}
+                                placeholder="Resistance type (e.g., Fire)"
+                              />
+                            </Col>
+                            <Col md={5}>
+                              <Form.Control
+                                type="text"
+                                value={resistance.value}
+                                onChange={(e) => handleResistanceChange(index, 'value', e.target.value)}
+                                placeholder="Value (e.g., 5)"
+                              />
+                            </Col>
+                            <Col md={2}>
+                              <Button variant="outline-danger" size="sm" onClick={() => handleRemoveResistance(index)}>
+                                <Trash />
+                              </Button>
+                            </Col>
+                          </Row>
+                        ))}
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                </Row>
+
+                <Row className="mb-3">
+                  <Col md={12}>
+                    <Card>
+                      <Card.Header className="d-flex justify-content-between align-items-center">
+                        <h6 className="mb-0">Immunities</h6>
+                        <Button variant="outline-primary" size="sm" onClick={handleAddImmunity}>
+                          <Plus /> Add Immunity
+                        </Button>
+                      </Card.Header>
+                      <Card.Body>
+                        {newCreature.immunities.map((immunity, index) => (
+                          <Row key={index} className="mb-2">
+                            <Col md={10}>
+                              <Form.Control
+                                type="text"
+                                value={immunity}
+                                onChange={(e) => handleImmunityChange(index, e.target.value)}
+                                placeholder="Immunity type (e.g., Fire, Poison)"
+                              />
+                            </Col>
+                            <Col md={2}>
+                              <Button variant="outline-danger" size="sm" onClick={() => handleRemoveImmunity(index)}>
+                                <Trash />
+                              </Button>
+                            </Col>
+                          </Row>
+                        ))}
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                </Row>
+
+                <Row className="mb-3">
+                  <Col md={12}>
+                    <Card>
+                      <Card.Header className="d-flex justify-content-between align-items-center">
+                        <h6 className="mb-0">Weaknesses</h6>
+                        <Button variant="outline-primary" size="sm" onClick={handleAddWeakness}>
+                          <Plus /> Add Weakness
+                        </Button>
+                      </Card.Header>
+                      <Card.Body>
+                        {newCreature.weaknesses.map((weakness, index) => (
+                          <Row key={index} className="mb-2">
+                            <Col md={5}>
+                              <Form.Control
+                                type="text"
+                                value={weakness.type}
+                                onChange={(e) => handleWeaknessChange(index, 'type', e.target.value)}
+                                placeholder="Weakness type (e.g., Fire)"
+                              />
+                            </Col>
+                            <Col md={5}>
+                              <Form.Control
+                                type="text"
+                                value={weakness.value}
+                                onChange={(e) => handleWeaknessChange(index, 'value', e.target.value)}
+                                placeholder="Value (e.g., 5)"
+                              />
+                            </Col>
+                            <Col md={2}>
+                              <Button variant="outline-danger" size="sm" onClick={() => handleRemoveWeakness(index)}>
+                                <Trash />
+                              </Button>
+                            </Col>
+                          </Row>
+                        ))}
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                </Row>
+
                 {/* Attacks Section */}
                 <CreatureAttackForm
                   attacks={newCreature.attacks}

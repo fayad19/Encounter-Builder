@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Container, Form, Row, Col, Card, Spinner, Alert, Button, Pagination } from 'react-bootstrap';
 import MonsterDetailModal from './MonsterDetailModal';
 import monsterSummary from '../data/monster-summary.json';
+import { searchMonsters } from '../services/monsterDB';
 
 function BestiaryTab({ onAddCreature }) {
   const [monsters, setMonsters] = useState([]);
@@ -54,10 +55,9 @@ function BestiaryTab({ onAddCreature }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/data/monsters/${monster.filename}`);
-      if (!res.ok) throw new Error('Failed to load monster data');
-      const data = await res.json();
-      setSelectedMonster(data);
+      const results = await searchMonsters({ nameSearch: monster.name });
+      if (results.length === 0) throw new Error('Monster not found in database');
+      setSelectedMonster(results[0]);
       setShowModal(true);
     } catch (err) {
       setError(err.message);
@@ -132,11 +132,15 @@ function BestiaryTab({ onAddCreature }) {
     }
 
     return (
-      <Pagination className="justify-content-center mt-3">
-        {currentPage > 1 && <Pagination.Prev onClick={() => setCurrentPage(currentPage - 1)} />}
-        {items}
-        {currentPage < totalPages && <Pagination.Next onClick={() => setCurrentPage(currentPage + 1)} />}
-      </Pagination>
+      <div className="d-flex justify-content-center mt-3">
+        <div style={{ minWidth: '300px', maxWidth: '100%', overflowX: 'auto' }}>
+          <Pagination className="justify-content-center mb-0">
+            {currentPage > 1 && <Pagination.Prev onClick={() => setCurrentPage(currentPage - 1)} />}
+            {items}
+            {currentPage < totalPages && <Pagination.Next onClick={() => setCurrentPage(currentPage + 1)} />}
+          </Pagination>
+        </div>
+      </div>
     );
   };
 
