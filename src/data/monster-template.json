@@ -1,0 +1,126 @@
+{
+    "name": "Monster Template",
+    "system": {
+        "attributes": {
+            "ac": {
+                "details": "",
+                "value": 0,
+                "conditionalEffects": [
+                    {
+                        "type": "ac",
+                        "value": -4,
+                        "conditions": {
+                            "predicate": {
+                                "lt": ["hp-percent", 50]
+                            }
+                        }
+                    }
+                ]
+            },
+            "hp": {
+                "details": "",
+                "max": 0,
+                "temp": 0,
+                "value": 0
+            },
+            "immunities": [
+                {
+                    "exceptions": [],
+                    "type": "string"
+                }
+            ],
+            "resistances": [
+                {
+                    "type": "string",
+                    "value": 0,
+                    "exceptions": [],
+                    "conditions": {
+                        "predicate": {
+                            "gte": ["hp-percent", 50]
+                        }
+                    }
+                }
+            ],
+            "conditionalEffects": [
+                {
+                    "type": "string",
+                    "value": 0,
+                    "conditions": {
+                        "predicate": {
+                            "lt": ["hp-percent", 50]
+                        }
+                    }
+                }
+            ],
+            "toggleableEffects": [
+                {
+                    "name": "string",
+                    "label": "string",
+                    "effects": [
+                        {
+                            "type": "string",
+                            "value": 0
+                        }
+                    ]
+                }
+            ],
+            "speed": {
+                "otherSpeeds": [
+                    {
+                        "type": "string",
+                        "value": 0
+                    }
+                ],
+                "value": 0
+            }
+        },
+        "abilities": {
+            "str": { "mod": 0 },
+            "dex": { "mod": 0 },
+            "con": { "mod": 0 },
+            "int": { "mod": 0 },
+            "wis": { "mod": 0 },
+            "cha": { "mod": 0 }
+        },
+        "saves": {
+            "fortitude": {
+                "saveDetail": "",
+                "value": 0
+            },
+            "reflex": {
+                "saveDetail": "",
+                "value": 0
+            },
+            "will": {
+                "saveDetail": "",
+                "value": 0
+            }
+        },
+        "skills": {
+            "acrobatics": { "base": 0 },
+            "athletics": { "base": 0 },
+            "intimidation": { "base": 0 },
+            "nature": { "base": 0 },
+            "survival": { "base": 0 }
+        },
+        "traits": {
+            "rarity": "common",
+            "size": {
+                "value": "medium"
+            },
+            "value": []
+        },
+        "details": {
+            "level": {
+                "value": 0
+            },
+            "languages": {
+                "value": []
+            }
+        },
+        "perception": {
+            "mod": 0,
+            "senses": []
+        }
+    }
+} 

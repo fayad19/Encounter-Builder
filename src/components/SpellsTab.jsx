@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Container, Form, Row, Col, Card, Spinner, Alert, Button, Pagination } from 'react-bootstrap';
 import SpellDetailModal from './SpellDetailModal';
 import spellSummary from '../data/spell-summary.json';
+import { searchSpells } from '../services/spellDB';
 
 function SpellsTab({ onAddSpell }) {
   const [spells, setSpells] = useState([]);
@@ -48,11 +49,9 @@ function SpellsTab({ onAddSpell }) {
     setSelectedSpell(null);
     setError(null);
     try {
-      const res = await fetch('/data/spells.json');
-      if (!res.ok) throw new Error('Failed to load spell data');
-      const allSpells = await res.json();
-      const fullSpell = allSpells[spell.index];
-      setSelectedSpell(fullSpell);
+      const results = await searchSpells(spell.name);
+      if (results.length === 0) throw new Error('Spell not found in database');
+      setSelectedSpell(results[0]);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -121,11 +120,15 @@ function SpellsTab({ onAddSpell }) {
     }
 
     return (
-      <Pagination className="justify-content-center mt-3">
-        {currentPage > 1 && <Pagination.Prev onClick={() => setCurrentPage(currentPage - 1)} />}
-        {items}
-        {currentPage < totalPages && <Pagination.Next onClick={() => setCurrentPage(currentPage + 1)} />}
-      </Pagination>
+      <div className="d-flex justify-content-center mt-3">
+        <div style={{ minWidth: '300px', maxWidth: '100%', overflowX: 'auto' }}>
+          <Pagination className="justify-content-center mb-0">
+            {currentPage > 1 && <Pagination.Prev onClick={() => setCurrentPage(currentPage - 1)} />}
+            {items}
+            {currentPage < totalPages && <Pagination.Next onClick={() => setCurrentPage(currentPage + 1)} />}
+          </Pagination>
+        </div>
+      </div>
     );
   };
 

@@ -250,6 +250,60 @@ function MonsterDetailModal({ monster, show, onHide, onImportToCreatures }) {
     );
   };
 
+  const extractResistancesFromRules = (monster) => {
+    if (!monster.items) return [];
+    
+    const resistances = new Map(); // Use Map to avoid duplicates
+    const currentHpPercent = (monster.system.attributes.hp.value / monster.system.attributes.hp.max) * 100;
+    
+    monster.items.forEach(item => {
+      if (item.system?.rules) {
+        item.system.rules.forEach(rule => {
+          if (rule.key === 'Resistance') {
+            // Check if the resistance applies based on HP predicate
+            const hpPredicate = rule.predicate?.find(p => p.lt || p.gte);
+            if (hpPredicate) {
+              const threshold = hpPredicate.lt ? hpPredicate.lt[1] : hpPredicate.gte[1];
+              const isAbove = hpPredicate.gte !== undefined;
+              const isBelow = hpPredicate.lt !== undefined;
+              
+              // Only include if the HP condition is met
+              if ((isAbove && currentHpPercent >= threshold) || 
+                  (isBelow && currentHpPercent < threshold)) {
+                const key = `${rule.type}-${rule.value}`;
+                resistances.set(key, {
+                  type: rule.type,
+                  value: rule.value,
+                  exceptions: rule.exceptions || [],
+                  predicate: rule.predicate
+                });
+              }
+            } else {
+              // If no HP predicate, always include
+              const key = `${rule.type}-${rule.value}`;
+              resistances.set(key, {
+                type: rule.type,
+                value: rule.value,
+                exceptions: rule.exceptions || [],
+                predicate: rule.predicate
+              });
+            }
+          }
+        });
+      }
+    });
+    
+    return Array.from(resistances.values());
+  };
+
+  const formatResistanceText = (res) => {
+    let text = `${res.type} ${res.value}`;
+    if (res.exceptions && res.exceptions.length > 0) {
+      text += ` (except ${res.exceptions.join(', ')})`;
+    }
+    return text;
+  };
+
   return (
     <>
       <Modal show={show} onHide={onHide} size="lg">
@@ -274,6 +328,69 @@ function MonsterDetailModal({ monster, show, onHide, onImportToCreatures }) {
           {/* Core Stats */}
           <h5>Core Statistics</h5>
           {renderAttributes()}
+
+          {/* Resistances, Immunities, Weaknesses, Conditional Effects */}
+          {(monster.system?.attributes?.resistances?.length > 0 || extractResistancesFromRules(monster).length > 0) && (
+            <div className="mb-3">
+              <h6>Resistances</h6>
+              <ul className="list-unstyled">
+                {monster.system?.attributes?.resistances?.map((res, i) => (
+                  <li key={`attr-${i}`}>
+                    {typeof res === 'string' ? res : 
+                      `${res.type}${res.value ? ` ${res.value}` : ''}${res.details ? ` (${res.details})` : ''}${res.exceptions ? ` (except ${res.exceptions.join(', ')})` : ''}`
+                    }
+                  </li>
+                ))}
+                {extractResistancesFromRules(monster).map((res, i) => (
+                  <li key={`rule-${i}`}>{formatResistanceText(res)}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {monster.system?.attributes?.immunities?.length > 0 && (
+            <div className="mb-3">
+              <h6>Immunities</h6>
+              <ul className="list-unstyled">
+                {monster.system.attributes.immunities.map((imm, i) => (
+                  <li key={i}>
+                    {typeof imm === 'string' ? imm : 
+                      `${imm.type}${imm.value ? ` ${imm.value}` : ''}${imm.details ? ` (${imm.details})` : ''}${imm.exceptions ? ` (except ${imm.exceptions})` : ''}`
+                    }
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {monster.system?.attributes?.weaknesses?.length > 0 && (
+            <div className="mb-3">
+              <h6>Weaknesses</h6>
+              <ul className="list-unstyled">
+                {monster.system.attributes.weaknesses.map((weak, i) => (
+                  <li key={i}>
+                    {typeof weak === 'string' ? weak : 
+                      `${weak.type}${weak.value ? ` ${weak.value}` : ''}${weak.details ? ` (${weak.details})` : ''}${weak.exceptions ? ` (except ${weak.exceptions})` : ''}`
+                    }
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {monster.system?.attributes?.conditionalEffects?.length > 0 && (
+            <div className="mb-3">
+              <h6>Conditional Effects</h6>
+              <ul className="list-unstyled">
+                {monster.system.attributes.conditionalEffects.map((cond, i) => (
+                  <li key={i}>
+                    {cond.type ? <b>{cond.type}</b> : null}
+                    {cond.value !== undefined ? ` ${cond.value}` : ''}
+                    {cond.conditions && cond.conditions.predicate ? (
+                      <span> (Condition: {Object.entries(cond.conditions.predicate).map(([op, arr]) => `${arr[0]} ${op} ${arr[1]}`).join(', ')})</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Ability Scores */}
           <h5>Ability Scores</h5>
