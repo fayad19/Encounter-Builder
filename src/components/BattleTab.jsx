@@ -1,4 +1,4 @@
-import React, { useState, StrictMode } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Button, ListGroup, ListGroupItem, Badge, Modal } from 'react-bootstrap';
 import { ArrowRight, Trash, Pencil, Plus, X } from 'react-bootstrap-icons';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
@@ -10,6 +10,8 @@ import action2 from '../assets/action-2.png';
 import action3 from '../assets/action-3.png';
 import freeAction from '../assets/action-free.png';
 import CreatureAttackForm from './CreatureAttackForm';
+import { calculateCurrentResistances } from '../utils/creatureConversion';
+import quickRefData from '../data/quickRef.json';
 
 // Add PersistentDamageDialog component
 function PersistentDamageDialog({ show, onHide, onConfirm, onCancel, damageType, damageValue }) {
@@ -49,7 +51,24 @@ function renderSpellDescription(rawDescription) {
       .map(line => `<p>${line}</p>`)
       .join('');
   }
+  // Add linkifyConditions logic
+  processed = linkifyConditions(processed);
   return <div dangerouslySetInnerHTML={{ __html: processed }} />;
+}
+
+// Helper: Map condition names to quickRefData Conditions
+const conditionList = quickRefData.find(q => q.name === 'Conditions')?.list || [];
+function linkifyConditions(text) {
+  if (!text) return text;
+  return text.replace(/@UUID\[Compendium\.pf2e\.conditionitems\.Item\.([A-Za-z]+)](\{([^}]+)\})?/g, (match, cond, _, label) => {
+    const condName = (label || cond).replace(/-/g, ' ');
+    const found = conditionList.find(c => c.name.toLowerCase() === condName.toLowerCase());
+    if (found) {
+      return `<a href='#' class='condition-link' data-condition='${found.name}'>${found.name}</a>`;
+    } else {
+      return label || cond;
+    }
+  });
 }
 
 function BattleTab({
@@ -89,6 +108,9 @@ function BattleTab({
     damageType: null,
     damageValue: null
   });
+  // Add state for showing condition modal
+  const [showConditionModal, setShowConditionModal] = useState(false);
+  const [conditionModalData, setConditionModalData] = useState(null);
 
   const handleStartBattle = () => {
     if (participants.length > 0) {
@@ -178,7 +200,7 @@ function BattleTab({
   };
 
   // Add effect to handle initiative tie resolution
-  React.useEffect(() => {
+  useEffect(() => {
     if (!initiativeTie) {
       // Clear initiative input state when tie is resolved
       setEditingInitiativeId(null);
@@ -685,7 +707,7 @@ function BattleTab({
   };
 
   // Move player with 0 HP before highest-initiative creature
-  React.useEffect(() => {
+  useEffect(() => {
     const playersWithZeroHP = participants.filter(p => p.type === 'player' && Number(p.hp) === 0);
     if (playersWithZeroHP.length > 0) {
       const creatures = participants.filter(p => p.type === 'creature');
@@ -702,7 +724,7 @@ function BattleTab({
     }
   }, [participants]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const handler = (e) => {
       if (e.detail) {
         if (typeof window.addBattleParticipant === 'function') {
@@ -714,7 +736,7 @@ function BattleTab({
     return () => window.removeEventListener('addBattleParticipant', handler);
   }, []);
 
-  React.useEffect(() => {
+  useEffect(() => {
     window.updateBattleParticipantInitiative = (battleId, newInitiative) => {
       if (!battleId) return;
       // Update in App state
@@ -844,6 +866,13 @@ function BattleTab({
     if (totalDamage > 0 && onUpdateParticipantHP) {
       const newHp = Math.max(0, Number(participant.hp) - totalDamage);
       onUpdateParticipantHP(participant.battleId, newHp);
+      // Recalculate resistances after HP change
+      const updatedParticipant = { ...participant, hp: newHp };
+      const updatedResistances = calculateCurrentResistances(updatedParticipant);
+      onUpdateBattleParticipant({
+        ...updatedParticipant,
+        resistances: updatedResistances
+      });
     }
 
     // Show removal check dialog for each instance
@@ -912,7 +941,7 @@ function BattleTab({
   };
 
   // Add effect to handle persistent damage at start of round
-  React.useEffect(() => {
+  useEffect(() => {
     if (isBattleStarted && currentRound > 0) {
       // Find the participant with the current turn
       const currentParticipant = participants.find(p => p.battleId === currentTurn);
@@ -922,8 +951,90 @@ function BattleTab({
     }
   }, [currentRound, isBattleStarted, currentTurn]);
 
+  // Add this helper function inside BattleTab
+  function renderRegularSpellsListLikeAttackSpells(attacks, expandedSpells, setExpandedSpells, participant) {
+    const spells = attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'regularSpell');
+    if (spells.length === 0) return null;
+    return (
+      <div className="mt-2">
+        <strong>Regular Spells:</strong>
+        <ul className="mb-0 ps-3">
+          {spells.map((atk, i) => {
+            const spellKey = `${participant.battleId}-regularSpell-${i}`;
+            const isExpanded = expandedSpells[spellKey];
+            let icon = null;
+            if (atk.actions === '1') icon = action1;
+            else if (atk.actions === '2') icon = action2;
+            else if (atk.actions === '3') icon = action3;
+            else if (atk.actions === 'free') icon = freeAction;
+            return (
+              atk.attackName ? (
+                <li key={spellKey} style={{ listStyleType: 'circle', cursor: atk.description ? 'pointer' : 'default' }} onClick={() => atk.description && setExpandedSpells(prev => ({ ...prev, [spellKey]: !prev[spellKey] }))}>
+                  <span className="text-muted"></span> <strong style={{ marginLeft: 4 }}>{atk.attackName}</strong>
+                  {icon && (
+                    <img
+                      src={icon}
+                      alt={`${atk.actions} action(s)`}
+                      style={{ height: '1.2em', verticalAlign: 'middle', marginLeft: 8, marginRight: 4 }}
+                    />
+                  )}
+                  {atk.range && <span>, Range: {atk.range}</span>}
+                  {atk.targets && <span>, Targets: {atk.targets}</span>}
+                  {atk.duration && <span>, Duration: {atk.duration}</span>}
+                  {atk.description && (
+                    <span className="ms-2" style={{ fontSize: '0.8em', color: '#666' }}>{isExpanded ? '▼' : '▶'}</span>
+                  )}
+                  {isExpanded && atk.description && (
+                    <div
+                      className="mt-1 mb-1"
+                      style={{ marginLeft: 24, padding: '8px', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #dee2e6' }}
+                      onClick={e => {
+                        const target = e.target;
+                        if (target.classList && target.classList.contains('condition-link')) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const condName = target.getAttribute('data-condition');
+                          const found = conditionList.find(c => c.name === condName);
+                          if (found) {
+                            setConditionModalData(found);
+                            setShowConditionModal(true);
+                          }
+                        }
+                      }}
+                    >
+                      {renderSpellDescription(atk.description)}
+                    </div>
+                  )}
+                </li>
+              ) : null
+            );
+          })}
+        </ul>
+      </div>
+    );
+  }
+
+  // Move the effect here, inside BattleTab
+  useEffect(() => {
+    function handleConditionClick(e) {
+      const target = e.target;
+      if (target.classList && target.classList.contains('condition-link')) {
+        e.preventDefault();
+        e.stopPropagation(); // Prevent spell collapse/expand when clicking condition link
+        const condName = target.getAttribute('data-condition');
+        const found = conditionList.find(c => c.name === condName);
+        if (found) {
+          setConditionModalData(found);
+          setShowConditionModal(true);
+        }
+      }
+    }
+    document.addEventListener('click', handleConditionClick);
+    return () => document.removeEventListener('click', handleConditionClick);
+  }, []);
+
   return (
-    <StrictMode>
+    <>
       <DragDropContext onDragEnd={handleDragEnd}>
         <Container fluid>
           <Row>
@@ -1035,8 +1146,8 @@ function BattleTab({
                                       <span className="text-info ms-2">(+{participant.tempHp} temp)</span>
                                     )}
                                   </div>
-                                  <div className="d-flex flex-column align-items-start ms-2 mb-1">
-                                    <div className="mb-1">
+                                  <div className="d-flex flex-column ms-2 mb-1" style={{ gap: '0.5rem' }}>
+                                    <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
                                       <input
                                         type="number"
                                         className="form-control d-inline-block"
@@ -1066,7 +1177,7 @@ function BattleTab({
                                         -
                                       </Button>
                                     </div>
-                                    <div>
+                                    <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
                                       <input
                                         type="number"
                                         className="form-control d-inline-block"
@@ -1102,49 +1213,50 @@ function BattleTab({
                                       Will: {renderStat(participant, 'will', participant.will)}
                                     </div>
                                   </div>
-
-                                  {/* Add Resistances, Immunities, and Weaknesses display */}
-                                  {participant.type === 'creature' && (
-                                    <>
-                                      {participant.resistances && participant.resistances.length > 0 && (
-                                        <div className="mt-2">
-                                          <strong>Resistances:</strong>
-                                          <ul className="mb-0 ps-3">
-                                            {participant.resistances.map((resistance, i) => (
-                                              <li key={`${participant.battleId}-resistance-${i}`} style={{ listStyleType: 'disc' }}>
-                                                {resistance.type} {resistance.value}
-                                              </li>
-                                            ))}
-                                          </ul>
-                                        </div>
-                                      )}
-                                      {participant.immunities && participant.immunities.length > 0 && (
-                                        <div className="mt-2">
-                                          <strong>Immunities:</strong>
-                                          <ul className="mb-0 ps-3">
-                                            {participant.immunities.map((immunity, i) => (
-                                              <li key={`${participant.battleId}-immunity-${i}`} style={{ listStyleType: 'disc' }}>
-                                                {immunity}
-                                              </li>
-                                            ))}
-                                          </ul>
-                                        </div>
-                                      )}
-                                      {participant.weaknesses && participant.weaknesses.length > 0 && (
-                                        <div className="mt-2">
-                                          <strong>Weaknesses:</strong>
-                                          <ul className="mb-0 ps-3">
-                                            {participant.weaknesses.map((weakness, i) => (
-                                              <li key={`${participant.battleId}-weakness-${i}`} style={{ listStyleType: 'disc' }}>
-                                                {weakness.type} {weakness.value}
-                                              </li>
-                                            ))}
-                                          </ul>
-                                        </div>
-                                      )}
-                                    </>
+                                  {(() => {
+                                    const currentResistances = calculateCurrentResistances(participant);
+                                    return currentResistances && currentResistances.length > 0 && (
+                                      <div className="mt-2">
+                                        <strong>Resistances:</strong>
+                                        <ul className={currentResistances.length > 2 ? "mb-0 ps-3 d-flex flex-wrap gap-2 list-unstyled flex-row" : "mb-0 ps-3"}>
+                                          {currentResistances.map((resistance, i) => (
+                                            <li key={`${participant.battleId}-resistance-${i}`} style={{ listStyleType: currentResistances.length > 2 ? 'none' : 'disc' }}>
+                                              {resistance.type} {resistance.value}
+                                              {currentResistances.length > 2 && i < currentResistances.length - 1 ? ',' : ''}
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    );
+                                  })()}
+                                  {participant.immunities && participant.immunities.length > 0 && (
+                                    <div className="mt-2">
+                                      <strong>Immunities:</strong>
+                                      <ul className={participant.immunities.length > 2 ? "mb-0 ps-3 d-flex flex-wrap gap-2 list-unstyled flex-row" : "mb-0 ps-3"}>
+                                        {participant.immunities.map((immunity, i) => (
+                                          <li key={`${participant.battleId}-immunity-${i}`} style={{ listStyleType: participant.immunities.length > 2 ? 'none' : 'disc' }}>
+                                            {typeof immunity === 'string' ? immunity : immunity.type}
+                                            {typeof immunity === 'object' && immunity.exceptions && immunity.exceptions.length > 0 && 
+                                              ` (except ${immunity.exceptions.join(', ')})`}
+                                            {participant.immunities.length > 2 && i < participant.immunities.length - 1 ? ',' : ''}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
                                   )}
-
+                                  {participant.weaknesses && participant.weaknesses.length > 0 && (
+                                    <div className="mt-2">
+                                      <strong>Weaknesses:</strong>
+                                      <ul className={participant.weaknesses.length > 2 ? "mb-0 ps-3 d-flex flex-wrap gap-2 list-unstyled flex-row" : "mb-0 ps-3"}>
+                                        {participant.weaknesses.map((weakness, i) => (
+                                          <li key={`${participant.battleId}-weakness-${i}`} style={{ listStyleType: participant.weaknesses.length > 2 ? 'none' : 'disc' }}>
+                                            {weakness.type} {weakness.value}
+                                            {participant.weaknesses.length > 2 && i < participant.weaknesses.length - 1 ? ',' : ''}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
                                   {participant.attacks && Array.isArray(participant.attacks) && participant.attacks.length > 0 && (
                                     <div>
                                       {/* Melee Attacks Section */}
@@ -1329,78 +1441,9 @@ function BattleTab({
                                         </div>
                                       )}
                                       {/* Regular Spells Section */}
-                                      {participant.attacks.some(atk => (atk.attackCategory || atk.attackType) === 'regularSpell') && (
-                                        <div className="mt-2">
-                                          <strong>Regular Spells:</strong>
-                                          <ul className="mb-0 ps-3">
-                                            {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'regularSpell').map((atk, i) => {
-                                              const spellKey = `${participant.battleId}-${i}`;
-                                              const isExpanded = expandedSpells[spellKey];
-                                              return (
-                                                <li key={`${participant.battleId}-regularSpell-${i}`} style={{ listStyleType: 'circle' }}>
-                                                  <div 
-                                                    className="d-flex align-items-center" 
-                                                    style={{ cursor: 'pointer' }}
-                                                    onClick={() => setExpandedSpells(prev => ({
-                                                      ...prev,
-                                                      [spellKey]: !prev[spellKey]
-                                                    }))}
-                                                  >
-                                                    <span className="text-muted"></span>
-                                                    {atk.attackName && (
-                                                      <strong style={{ marginLeft: 4 }}>
-                                                        {atk.attackName}
-                                                        {atk.description && (
-                                                          <span className="ms-2" style={{ fontSize: '0.8em', color: '#666' }}>
-                                                            {isExpanded ? '▼' : '▶'}
-                                                          </span>
-                                                        )}
-                                                      </strong>
-                                                    )}
-                                                    {(() => {
-                                                      let icon = null;
-                                                      if (atk.actions === '1') icon = action1;
-                                                      else if (atk.actions === '2') icon = action2;
-                                                      else if (atk.actions === '3') icon = action3;
-                                                      else if (atk.actions === 'free') icon = freeAction;
-                                                      if (icon) {
-                                                        return (
-                                                          <img
-                                                            src={icon}
-                                                            alt={`${atk.actions} action(s)`}
-                                                            style={{ height: '1.2em', verticalAlign: 'middle', marginLeft: 8, marginRight: 4 }}
-                                                          />
-                                                        );
-                                                      }
-                                                      return null;
-                                                    })()}
-                                                    {atk.range && <span>, Range: {atk.range}</span>}
-                                                    {atk.targets && <span>, Targets: {atk.targets}</span>}
-                                                    {atk.duration && <span>, Duration: {atk.duration}</span>}
-                                                  </div>
-                                                  {isExpanded && atk.description && (
-                                                    <div 
-                                                      className="mt-1 mb-1" 
-                                                      style={{ 
-                                                        marginLeft: 24, 
-                                                        padding: '8px',
-                                                        backgroundColor: '#f8f9fa',
-                                                        borderRadius: '4px',
-                                                        border: '1px solid #dee2e6'
-                                                      }}
-                                                    >
-                                                      {renderSpellDescription(atk.description)}
-                                                    </div>
-                                                  )}
-                                                </li>
-                                              );
-                                            })}
-                                          </ul>
-                                        </div>
-                                      )}
+                                      {renderRegularSpellsListLikeAttackSpells(participant.attacks || [], expandedSpells, setExpandedSpells, participant)}
                                     </div>
                                   )}
-
                                 </>
                               ) : (
                                 <div className="d-flex flex-column align-items-start ms-2 mb-1">
@@ -1410,8 +1453,8 @@ function BattleTab({
                                       <span className="text-info ms-2">(+{participant.tempHp} temp)</span>
                                     )}
                                   </div>
-                                  <div className="d-flex flex-column align-items-start ms-2 mb-1">
-                                    <div className="mb-1">
+                                  <div className="d-flex flex-column ms-2 mb-1" style={{ gap: '0.5rem' }}>
+                                    <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
                                       <input
                                         type="number"
                                         className="form-control d-inline-block"
@@ -1441,7 +1484,7 @@ function BattleTab({
                                         -
                                       </Button>
                                     </div>
-                                    <div>
+                                    <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
                                       <input
                                         type="number"
                                         className="form-control d-inline-block"
@@ -1461,12 +1504,12 @@ function BattleTab({
                                         +
                                       </Button>
                                     </div>
-                                    <div className="mt-1">
-                                      <span className="ms-2">AC: {renderStat(participant, 'ac', participant.ac || 0)}</span>
-                                      {participant.level !== undefined && participant.level !== null && (
-                                        <span className="ms-2">Level: {renderStat(participant, 'level', participant.level)}</span>
-                                      )}
-                                    </div>
+                                  </div>
+                                  <div className="mt-1">
+                                    <span className="ms-2">AC: {renderStat(participant, 'ac', participant.ac || 0)}</span>
+                                    {participant.level !== undefined && participant.level !== null && (
+                                      <span className="ms-2">Level: {renderStat(participant, 'level', participant.level)}</span>
+                                    )}
                                   </div>
                                 </div>
                               )}
@@ -1727,157 +1770,175 @@ function BattleTab({
 
                       <div className="row">
                         <div className="col-md-12 mb-3">
-                          <div className="d-flex justify-content-between align-items-center mb-2">
-                            <h6 className="mb-0">Immunities</h6>
-                            <Button variant="outline-primary" size="sm" onClick={() => setCreatureToEdit(prev => ({ ...prev, immunities: [...(prev.immunities || []), ''] }))}>
-                              <Plus /> Add Immunity
-                            </Button>
-                          </div>
-                          {creatureToEdit.immunities && creatureToEdit.immunities.map((immunity, index) => (
-                            <div key={index} className="row mb-2">
-                              <div className="col-md-10">
-                                <input
-                                  type="text"
-                                  className="form-control"
-                                  value={immunity}
-                                  onChange={e => {
-                                    const updatedImmunities = [...creatureToEdit.immunities];
-                                    updatedImmunities[index] = e.target.value;
-                                    setCreatureToEdit(prev => ({ ...prev, immunities: updatedImmunities }));
-                                  }}
-                                  placeholder="Immunity type (e.g., Fire, Poison)"
-                                />
-                              </div>
-                              <div className="col-md-2">
-                                <Button
-                                  variant="outline-danger"
-                                  size="sm"
-                                  onClick={() => setCreatureToEdit(prev => ({ ...prev, immunities: prev.immunities.filter((_, i) => i !== index) }))}
-                                >
-                                  <Trash />
-                                </Button>
-                              </div>
+                            <div className="d-flex justify-content-between align-items-center mb-2">
+                              <h6 className="mb-0">Immunities</h6>
+                              <Button variant="outline-primary" size="sm" onClick={() => setCreatureToEdit(prev => ({ ...prev, immunities: [...(prev.immunities || []), ''] }))}>
+                                <Plus /> Add Immunity
+                              </Button>
                             </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="row">
-                        <div className="col-md-12 mb-3">
-                          <div className="d-flex justify-content-between align-items-center mb-2">
-                            <h6 className="mb-0">Weaknesses</h6>
-                            <Button variant="outline-primary" size="sm" onClick={() => setCreatureToEdit(prev => ({ ...prev, weaknesses: [...(prev.weaknesses || []), { type: '', value: '' }] }))}>
-                              <Plus /> Add Weakness
-                            </Button>
+                            {creatureToEdit.immunities && creatureToEdit.immunities.map((immunity, index) => (
+                              <div key={index} className="row mb-2">
+                                <div className="col-md-10">
+                                  <input
+                                    type="text"
+                                    className="form-control"
+                                    value={immunity}
+                                    onChange={e => {
+                                      const updatedImmunities = [...creatureToEdit.immunities];
+                                      updatedImmunities[index] = e.target.value;
+                                      setCreatureToEdit(prev => ({ ...prev, immunities: updatedImmunities }));
+                                    }}
+                                    placeholder="Immunity type (e.g., Fire, Poison)"
+                                  />
+                                </div>
+                                <div className="col-md-2">
+                                  <Button
+                                    variant="outline-danger"
+                                    size="sm"
+                                    onClick={() => setCreatureToEdit(prev => ({ ...prev, immunities: prev.immunities.filter((_, i) => i !== index) }))}
+                                  >
+                                    <Trash />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                          {creatureToEdit.weaknesses && creatureToEdit.weaknesses.map((weakness, index) => (
-                            <div key={index} className="row mb-2">
-                              <div className="col-md-5">
-                                <input
-                                  type="text"
-                                  className="form-control"
-                                  value={weakness.type}
-                                  onChange={e => {
-                                    const updatedWeaknesses = [...creatureToEdit.weaknesses];
-                                    updatedWeaknesses[index] = { ...updatedWeaknesses[index], type: e.target.value };
-                                    setCreatureToEdit(prev => ({ ...prev, weaknesses: updatedWeaknesses }));
-                                  }}
-                                  placeholder="Weakness type (e.g., Fire)"
-                                />
-                              </div>
-                              <div className="col-md-5">
-                                <input
-                                  type="text"
-                                  className="form-control"
-                                  value={weakness.value}
-                                  onChange={e => {
-                                    const updatedWeaknesses = [...creatureToEdit.weaknesses];
-                                    updatedWeaknesses[index] = { ...updatedWeaknesses[index], value: e.target.value };
-                                    setCreatureToEdit(prev => ({ ...prev, weaknesses: updatedWeaknesses }));
-                                  }}
-                                  placeholder="Value (e.g., 5)"
-                                />
-                              </div>
-                              <div className="col-md-2">
-                                <Button
-                                  variant="outline-danger"
-                                  size="sm"
-                                  onClick={() => setCreatureToEdit(prev => ({ ...prev, weaknesses: prev.weaknesses.filter((_, i) => i !== index) }))}
-                                >
-                                  <Trash />
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
                         </div>
-                      </div>
 
-                      <div className="mb-3">
-                        <div className="d-flex justify-content-between align-items-center mb-2">
-                          <h6 className="mb-0">Attacks</h6>
+                        <div className="row">
+                          <div className="col-md-12 mb-3">
+                            <div className="d-flex justify-content-between align-items-center mb-2">
+                              <h6 className="mb-0">Weaknesses</h6>
+                              <Button variant="outline-primary" size="sm" onClick={() => setCreatureToEdit(prev => ({ ...prev, weaknesses: [...(prev.weaknesses || []), { type: '', value: '' }] }))}>
+                                <Plus /> Add Weakness
+                              </Button>
+                            </div>
+                            {creatureToEdit.weaknesses && creatureToEdit.weaknesses.map((weakness, index) => (
+                              <div key={index} className="row mb-2">
+                                <div className="col-md-5">
+                                  <input
+                                    type="text"
+                                    className="form-control"
+                                    value={weakness.type}
+                                    onChange={e => {
+                                      const updatedWeaknesses = [...creatureToEdit.weaknesses];
+                                      updatedWeaknesses[index] = { ...updatedWeaknesses[index], type: e.target.value };
+                                      setCreatureToEdit(prev => ({ ...prev, weaknesses: updatedWeaknesses }));
+                                    }}
+                                    placeholder="Weakness type (e.g., Fire)"
+                                  />
+                                </div>
+                                <div className="col-md-5">
+                                  <input
+                                    type="text"
+                                    className="form-control"
+                                    value={weakness.value}
+                                    onChange={e => {
+                                      const updatedWeaknesses = [...creatureToEdit.weaknesses];
+                                      updatedWeaknesses[index] = { ...updatedWeaknesses[index], value: e.target.value };
+                                      setCreatureToEdit(prev => ({ ...prev, weaknesses: updatedWeaknesses }));
+                                    }}
+                                    placeholder="Value (e.g., 5)"
+                                  />
+                                </div>
+                                <div className="col-md-2">
+                                  <Button
+                                    variant="outline-danger"
+                                    size="sm"
+                                    onClick={() => setCreatureToEdit(prev => ({ ...prev, weaknesses: prev.weaknesses.filter((_, i) => i !== index) }))}
+                                  >
+                                    <Trash />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <CreatureAttackForm
-                          attacks={creatureToEdit.attacks || []}
-                          onChange={attacks => setCreatureToEdit(prev => ({ ...prev, attacks }))}
-                          onAddAttack={type => setCreatureToEdit(prev => ({ ...prev, attacks: [...(prev.attacks || []), type === 'spell' ? { attackName: '', attackType: 'spell', tradition: [], actions: '1', targetOrArea: 'target', areaType: '', range: '' } : type === 'regularSpell' ? { attackName: '', attackType: 'regularSpell', actions: '1', range: '', targets: '', duration: '', description: '' } : { attackName: '', attackType: type, firstHitModifier: '', secondHitModifier: '', thirdHitModifier: '', damage: '' }] }))}
-                          onRemoveAttack={index => setCreatureToEdit(prev => ({ ...prev, attacks: prev.attacks.filter((_, i) => i !== index) }))}
-                        />
-                      </div>
-                      <div className="d-flex gap-2 justify-content-end">
-                        <Button variant="secondary" onClick={() => setEditCreatureDialogOpen(false)} type="button">Cancel</Button>
-                        <Button variant="primary" type="submit">Save</Button>
-                      </div>
-                    </form>
+
+                        <div className="mb-3">
+                          <div className="d-flex justify-content-between align-items-center mb-2">
+                            <h6 className="mb-0">Attacks</h6>
+                          </div>
+                          <CreatureAttackForm
+                            attacks={creatureToEdit.attacks || []}
+                            onChange={attacks => setCreatureToEdit(prev => ({ ...prev, attacks }))}
+                            onAddAttack={type => setCreatureToEdit(prev => ({ ...prev, attacks: [...(prev.attacks || []), type === 'spell' ? { attackName: '', attackType: 'spell', tradition: [], actions: '1', targetOrArea: 'target', areaType: '', range: '' } : type === 'regularSpell' ? { attackName: '', attackType: 'regularSpell', actions: '1', range: '', targets: '', duration: '', description: '' } : { attackName: '', attackType: type, firstHitModifier: '', secondHitModifier: '', thirdHitModifier: '', damage: '' }] }))}
+                            onRemoveAttack={index => setCreatureToEdit(prev => ({ ...prev, attacks: prev.attacks.filter((_, i) => i !== index) }))}
+                          />
+                        </div>
+                        <div className="d-flex gap-2 justify-content-end">
+                          <Button variant="secondary" onClick={() => setEditCreatureDialogOpen(false)} type="button">Cancel</Button>
+                          <Button variant="primary" type="submit">Save</Button>
+                        </div>
+                      </form>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Initiative tie modal for both inline and start battle */}
-          {(initiativeTie && onResolveInitiativeTie) ? (
-            <div className="modal show fade d-block" tabIndex="-1" role="dialog" style={{ background: 'rgba(0,0,0,0.5)' }}>
-              <div className="modal-dialog" role="document">
-                <div className="modal-content">
-                  <div className="modal-header">
-                    <h5 className="modal-title">Initiative Tie</h5>
-                    <button type="button" className="btn-close" onClick={() => onResolveInitiativeTie(null)}></button>
-                  </div>
-                  <div className="modal-body">
-                    <p>
-                      Multiple participants have initiative <strong>{initiativeTie.newValue}</strong>.<br />
-                      Who should go first?
-                    </p>
-                    <ul>
-                      {[initiativeTie.participant, ...initiativeTie.tiedParticipants].map(p => (
-                        <li key={p.battleId}>
-                          <Button variant="outline-primary" onClick={() => onResolveInitiativeTie(p.battleId)}>
-                            {p.name}
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div className="modal-footer">
-                    <Button variant="secondary" onClick={() => onResolveInitiativeTie(null)}>Cancel</Button>
+            {/* Initiative tie modal for both inline and start battle */}
+            {(initiativeTie && onResolveInitiativeTie) ? (
+              <div className="modal show fade d-block" tabIndex="-1" role="dialog" style={{ background: 'rgba(0,0,0,0.5)' }}>
+                <div className="modal-dialog" role="document">
+                  <div className="modal-content">
+                    <div className="modal-header">
+                      <h5 className="modal-title">Initiative Tie</h5>
+                      <button type="button" className="btn-close" onClick={() => onResolveInitiativeTie(null)}></button>
+                    </div>
+                    <div className="modal-body">
+                      <p>
+                        Multiple participants have initiative <strong>{initiativeTie.newValue}</strong>.<br />
+                        Who should go first?
+                      </p>
+                      <ul>
+                        {[initiativeTie.participant, ...initiativeTie.tiedParticipants].map(p => (
+                          <li key={p.battleId}>
+                            <Button variant="outline-primary" onClick={() => onResolveInitiativeTie(p.battleId)}>
+                              {p.name}
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="modal-footer">
+                      <Button variant="secondary" onClick={() => onResolveInitiativeTie(null)}>Cancel</Button>
+                    </div>
                   </div>
                 </div>
               </div>
+            ) : null}
+
+            <PersistentDamageDialog
+              show={persistentDamageDialog.show}
+              onHide={() => setPersistentDamageDialog({ show: false })}
+              onConfirm={() => handlePersistentDamageCheck(true)}
+              onCancel={() => handlePersistentDamageCheck(false)}
+              damageType={persistentDamageDialog.damageType}
+              damageValue={persistentDamageDialog.damageValue}
+            />
+          </Container>
+        </DragDropContext>
+        {showConditionModal && conditionModalData && (
+          <div className="modal show fade d-block" tabIndex="-1" role="dialog" style={{ background: 'rgba(0,0,0,0.5)' }}>
+            <div className="modal-dialog" role="document">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">{conditionModalData.name}</h5>
+                  <button type="button" className="btn-close" onClick={() => setShowConditionModal(false)}></button>
+                </div>
+                <div className="modal-body">
+                  <div dangerouslySetInnerHTML={{ __html: linkifyConditions(conditionModalData.description) }} />
+                </div>
+                <div className="modal-footer">
+                  <Button variant="secondary" onClick={() => setShowConditionModal(false)}>Close</Button>
+                </div>
+              </div>
             </div>
-          ) : null}
+          </div>
+        )}
+      </>
+    );
+  }
 
-          <PersistentDamageDialog
-            show={persistentDamageDialog.show}
-            onHide={() => setPersistentDamageDialog({ show: false })}
-            onConfirm={() => handlePersistentDamageCheck(true)}
-            onCancel={() => handlePersistentDamageCheck(false)}
-            damageType={persistentDamageDialog.damageType}
-            damageValue={persistentDamageDialog.damageValue}
-          />
-        </Container>
-      </DragDropContext>
-    </StrictMode>
-  );
-}
-
-export default BattleTab; 
+  export default BattleTab; 
