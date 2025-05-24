@@ -102,7 +102,8 @@ function MonsterDetailModal({ monster, show, onHide, onImportToCreatures }) {
         type: weak.type,
         value: weak.value || '',
         exceptions: weak.exceptions || []
-      })) || []
+      })) || [],
+      items: monster.items
     };
 
     // Now add attacks and spells to the creature.attacks array
@@ -283,6 +284,42 @@ function MonsterDetailModal({ monster, show, onHide, onImportToCreatures }) {
     return text;
   };
 
+  function renderRegularSpells(attacks) {
+    const spells = attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'regularSpell');
+    if (spells.length === 0) return null;
+    // Determine which columns to show
+    const showRange = spells.some(s => s.range);
+    const showTargets = spells.some(s => s.targets);
+    const showDuration = spells.some(s => s.duration);
+    return (
+      <div className="mb-3">
+        <strong>Regular Spells:</strong>
+        <div className="table-responsive">
+          <table className="table table-sm table-bordered align-middle mb-0">
+            <thead>
+              <tr>
+                <th style={{ minWidth: 120 }}>Spell Name</th>
+                {showRange && <th style={{ minWidth: 80 }}>Range</th>}
+                {showTargets && <th style={{ minWidth: 80 }}>Targets</th>}
+                {showDuration && <th style={{ minWidth: 80 }}>Duration</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {spells.map((s, i) => (
+                <tr key={i}>
+                  <td><span style={{ fontWeight: 500 }}>{s.attackName}</span></td>
+                  {showRange && <td>{s.range || ''}</td>}
+                  {showTargets && <td>{s.targets || ''}</td>}
+                  {showDuration && <td>{s.duration || ''}</td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <Modal show={show} onHide={onHide} size="lg">
@@ -378,6 +415,9 @@ function MonsterDetailModal({ monster, show, onHide, onImportToCreatures }) {
           {/* Senses and Languages */}
           {renderSenses()}
           {renderLanguages()}
+
+          {/* Regular Spells */}
+          {renderRegularSpells(monster.attacks || [])}
 
           {/* Abilities and Actions */}
           <h5>Abilities and Actions</h5>

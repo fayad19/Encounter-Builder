@@ -271,7 +271,8 @@ function BestiaryTab({ onAddCreature }) {
                           type: weak.type,
                           value: weak.value || '',
                           exceptions: weak.exceptions || []
-                        })) || []
+                        })) || [],
+                        items: monsterData.items
                       };
                       if (monsterData.items) {
                         monsterData.items.forEach(item => {

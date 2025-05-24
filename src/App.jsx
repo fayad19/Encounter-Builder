@@ -259,8 +259,11 @@ function App() {
     // Only use participants that are already in battleParticipants
     const allParticipants = battleParticipants.map(participant => ({
       ...participant,
-      type: participant.type || (participant.hp ? 'creature' : 'player')
+      type: participant.type || (participant.hp ? 'creature' : 'player'),
+      battleId: Date.now() + Math.random() // Ensure unique battleId for each participant
     }));
+    
+    console.log('Starting battle with participants:', allParticipants.map(p => ({ name: p.name, type: p.type })));
     
     if (allParticipants.length === 0) {
       alert('Please add at least one participant to start the battle.');
@@ -269,10 +272,10 @@ function App() {
 
     setBattleStarted(true);
     setCurrentRound(1);
-    // Clear previous battle state
-    setBattleParticipants([]);
     setCurrentTurn(null);
     
+    // Clear battle participants and set remaining participants
+    setBattleParticipants([]);
     setRemainingParticipants(allParticipants);
     setInitiativeDialogOpen(true);
   };
@@ -285,37 +288,36 @@ function App() {
   };
 
   const handleInitiativeConfirm = (initiative) => {
+    if (remainingParticipants.length === 0) {
+      console.log('No remaining participants to confirm initiative for');
+      return;
+    }
+
     const currentParticipant = remainingParticipants[0];
+    console.log('Confirming initiative for participant:', { name: currentParticipant.name, type: currentParticipant.type });
+    console.log('Remaining participants:', remainingParticipants.map(p => ({ name: p.name, type: p.type })));
+    
     const newInitiative = Number(initiative);
     // Always add the participant and set lastAddedInitiative
     const newParticipant = {
       ...currentParticipant,
       initiative: newInitiative,
       status: '',
-      battleId: Date.now(),
+      battleId: currentParticipant.battleId || Date.now(),
       type: currentParticipant.type || 'creature',
       hp: currentParticipant.hp || 0,
       id: currentParticipant.id,
       damageInput: '',
       maxHp: (currentParticipant.maxHp !== undefined && currentParticipant.maxHp !== '' && currentParticipant.maxHp !== null) ? Number(currentParticipant.maxHp) : (currentParticipant.hp || 0)
     };
+
     setBattleParticipants(prevParticipants => {
       const updatedParticipants = [...prevParticipants, newParticipant];
-      if (remainingParticipants.length === 1) {
-        const sorted = [...updatedParticipants].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
-        if (sorted.length > 0) {
-          setCurrentTurn(sorted[0].battleId);
-        }
-        return sorted;
-      }
+      console.log('Updated battle participants:', updatedParticipants.map(p => ({ name: p.name, type: p.type, initiative: p.initiative })));
       return updatedParticipants;
     });
+
     setLastAddedInitiative(newInitiative);
-    // Only close dialog if this was the last participant
-    if (remainingParticipants.length === 1) {
-      setInitiativeDialogOpen(false);
-    }
-    // Do not advance to next participant here; let useEffect handle it after tie check
   };
 
   const handleResolveInitiativeTie = (firstId) => {
@@ -342,15 +344,23 @@ function App() {
         const tieCheck = (val) => updated.filter(p => p.initiative === val);
         if (tieCheck(initiativeTie.newValue).length > 1) {
           setLastAddedInitiative(initiativeTie.newValue);
+          setInitiativeTie(null);
+          setPendingInitiativeParticipant(null);
         } else if (tieCheck(initiativeTie.newValue + 1).length > 1) {
           setLastAddedInitiative(initiativeTie.newValue + 1);
+          setInitiativeTie(null);
+          setPendingInitiativeParticipant(null);
         } else {
           setLastAddedInitiative(null);
+          setInitiativeTie(null);
+          setPendingInitiativeParticipant(null);
         }
         return [...updated].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
       });
-      setInitiativeTie(null);
-      setPendingInitiativeParticipant(null);
+      // Do not clear tie state here!
+      // setInitiativeTie(null);
+      // setPendingInitiativeParticipant(null);
+      // Do not advance to next participant here; let useEffect handle it after tie check
       return;
     }
     // Start battle flow: add both participants with different initiatives
@@ -382,21 +392,59 @@ function App() {
         p => !(p.initiative === initiativeTie.newValue && allTied.some(tied => tied.battleId === p.battleId))
       );
       const updatedParticipants = [...filtered, newSelectedParticipant, newOtherParticipant];
-      // After updating, check for ties for both values
-      const tieCheck = (val) => updatedParticipants.filter(p => p.initiative === val);
-      if (tieCheck(initiativeTie.newValue).length > 1) {
-        setLastAddedInitiative(initiativeTie.newValue);
-      } else if (tieCheck(initiativeTie.newValue + 1).length > 1) {
-        setLastAddedInitiative(initiativeTie.newValue + 1);
-      } else {
-        setLastAddedInitiative(null);
-      }
+      setLastAddedInitiative(null);
+      setInitiativeTie(null);
+      setPendingInitiativeParticipant(null);
       return updatedParticipants;
     });
-    setInitiativeTie(null);
-    setPendingInitiativeParticipant(null);
+    // Do not clear tie state here!
+    // setInitiativeTie(null);
+    // setPendingInitiativeParticipant(null);
     // Do not advance to next participant here; let useEffect handle it after tie check
   };
+
+  // Global tie detection: runs whenever battleParticipants changes and there is no current tie
+  useEffect(() => {
+    if (initiativeTie) return;
+    // Only check if all participants have initiatives
+    if (battleParticipants.length > 1 && battleParticipants.every(p => p.initiative !== null && p.initiative !== undefined)) {
+      const initiativeCounts = battleParticipants.reduce((acc, p) => {
+        if (p.initiative != null) {
+          acc[p.initiative] = (acc[p.initiative] || []);
+          acc[p.initiative].push(p);
+        }
+        return acc;
+      }, {});
+      const foundTie = Object.values(initiativeCounts).find(arr => arr.length > 1);
+      if (foundTie) {
+        setInitiativeTie({
+          participant: foundTie[0],
+          tiedParticipants: foundTie.slice(1),
+          newValue: foundTie[0].initiative
+        });
+        setPendingInitiativeParticipant(null);
+      }
+    }
+  }, [battleParticipants, initiativeTie]);
+
+  // Sort participants by initiative after all initiatives are entered and all ties are resolved
+  useEffect(() => {
+    if (
+      battleParticipants.length > 1 &&
+      battleParticipants.every(p => p.initiative !== null && p.initiative !== undefined) &&
+      !initiativeTie &&
+      !initiativeDialogOpen
+    ) {
+      setBattleParticipants(prev => {
+        const sorted = [...prev].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
+        // Only update if the order has actually changed
+        if (JSON.stringify(sorted.map(p => p.battleId)) !== JSON.stringify(prev.map(p => p.battleId))) {
+          return sorted;
+        }
+        return prev;
+      });
+    }
+  }, [battleParticipants, initiativeTie, initiativeDialogOpen]);
 
   const handleInitiativeSkip = () => {
     const nextParticipants = remainingParticipants.slice(1);
@@ -548,74 +596,53 @@ function App() {
 
   // Update HP for a participant in battle
   const handleUpdateParticipantHP = (battleId, newHP) => {
-    console.log('handleUpdateParticipantHP called with', { battleId, newHP });
-    // Ensure HP cannot go below 0 and cannot exceed maxHP
-    const participant = battleParticipants.find(p => p.battleId === battleId);
-    if (!participant) return;
-    
-    const maxHp = Number(participant.maxHp) || Number(participant.hp);
-    const clampedHP = Math.min(maxHp, Math.max(0, Number(newHP)));
-    
-    setBattleParticipants(prev => {
-      return prev.map(p => {
-        if (p.battleId === battleId) {
-          let updated = { ...p, hp: clampedHP };
-          if (updated.type === 'creature') {
-            updated.resistances = calculateCurrentResistances({ ...updated, hp: clampedHP });
-          }
-          return updated;
+    setBattleParticipants(prevParticipants => {
+      return prevParticipants.map(participant => {
+        if (participant.battleId !== battleId) return participant;
+        const maxHp = Number(participant.maxHp) || Number(participant.hp);
+        const clampedHP = Math.min(maxHp, Math.max(0, Number(newHP)));
+        let updated = { ...participant, hp: clampedHP };
+        if (updated.type === 'creature') {
+          updated.resistances = calculateCurrentResistances({ ...updated, hp: clampedHP });
         }
-        return p;
-      });
-    });
-  };
-
-  // Add new function to handle temporary HP
-  const handleUpdateParticipantTempHP = (battleId, tempHP) => {
-    console.log('handleUpdateParticipantTempHP called with', { battleId, tempHP });
-    // Ensure tempHP cannot go below 0
-    const clampedTempHP = Math.max(0, Number(tempHP));
-    
-    setBattleParticipants(prev => {
-      return prev.map(p => {
-        if (p.battleId === battleId) {
-          let updated = { ...p, tempHp: clampedTempHP };
-          if (updated.type === 'creature') {
-            updated.resistances = calculateCurrentResistances(updated);
-          }
-          return updated;
-        }
-        return p;
+        return updated;
       });
     });
   };
 
   // Add new function to handle damage with temp HP consideration
   const handleParticipantDamage = (battleId, damage) => {
-    const participant = battleParticipants.find(p => p.battleId === battleId);
-    if (!participant) return;
-
-    const currentTempHP = Number(participant.tempHp) || 0;
-    const currentHP = Number(participant.hp) || 0;
-    const damageAmount = Number(damage);
-
-    if (currentTempHP > 0) {
-      // If we have temp HP, reduce it first
-      if (damageAmount >= currentTempHP) {
-        // Temp HP is depleted, remaining damage goes to normal HP
-        const remainingDamage = damageAmount - currentTempHP;
-        handleUpdateParticipantTempHP(battleId, 0); // Clear temp HP
-        if (remainingDamage > 0) {
-          handleUpdateParticipantHP(battleId, currentHP - remainingDamage);
+    setBattleParticipants(prevParticipants => {
+      return prevParticipants.map(participant => {
+        if (participant.battleId !== battleId) return participant;
+        const currentTempHP = Number(participant.tempHp) || 0;
+        const currentHP = Number(participant.hp) || 0;
+        const damageAmount = Number(damage);
+        if (currentTempHP > 0) {
+          if (damageAmount >= currentTempHP) {
+            // Temp HP is depleted, remaining damage goes to normal HP
+            const remainingDamage = damageAmount - currentTempHP;
+            const newHP = Math.max(0, currentHP - remainingDamage);
+            let updated = { ...participant, tempHp: 0, hp: newHP };
+            if (updated.type === 'creature') {
+              updated.resistances = calculateCurrentResistances({ ...updated, hp: newHP });
+            }
+            return updated;
+          } else {
+            // Temp HP absorbs all damage
+            return { ...participant, tempHp: currentTempHP - damageAmount };
+          }
+        } else {
+          // No temp HP, damage goes directly to normal HP
+          const newHP = Math.max(0, currentHP - damageAmount);
+          let updated = { ...participant, hp: newHP };
+          if (updated.type === 'creature') {
+            updated.resistances = calculateCurrentResistances({ ...updated, hp: newHP });
+          }
+          return updated;
         }
-      } else {
-        // Temp HP absorbs all damage
-        handleUpdateParticipantTempHP(battleId, currentTempHP - damageAmount);
-      }
-    } else {
-      // No temp HP, damage goes directly to normal HP
-      handleUpdateParticipantHP(battleId, currentHP - damageAmount);
-    }
+      });
+    });
   };
 
   // Update a participant in battle by battleId
@@ -631,26 +658,42 @@ function App() {
     // Skip if no last added initiative or if we're not in initiative entry mode
     if (lastAddedInitiative === null || !initiativeDialogOpen) return;
 
+    console.log('Initiative effect triggered with lastAddedInitiative:', lastAddedInitiative);
+    console.log('Current battle participants:', battleParticipants.map(p => ({ name: p.name, type: p.type, initiative: p.initiative })));
+    console.log('Remaining participants:', remainingParticipants.map(p => ({ name: p.name, type: p.type })));
+
     // Check for ties
     const ties = battleParticipants.filter(p => p.initiative === lastAddedInitiative);
     if (ties.length > 1) {
+      console.log('Found initiative tie:', ties.map(p => ({ name: p.name, type: p.type, initiative: p.initiative })));
       setInitiativeTie({ 
         participant: ties[0], 
         tiedParticipants: ties.slice(1), 
         newValue: lastAddedInitiative 
       });
       setPendingInitiativeParticipant(null);
+      setInitiativeDialogOpen(false); // Hide initiative dialog while resolving tie
       return;
     }
 
     // No tie, proceed to next participant
-    const nextParticipants = remainingParticipants.slice(1);
-    setRemainingParticipants(nextParticipants);
-    
-    if (nextParticipants.length > 0) {
-      setInitiativeDialogOpen(true);
+    if (remainingParticipants.length > 0) {
+      const nextParticipants = remainingParticipants.slice(1);
+      console.log('Moving to next participants:', nextParticipants.map(p => ({ name: p.name, type: p.type })));
+      setRemainingParticipants(nextParticipants);
+      
+      if (nextParticipants.length > 0) {
+        // Keep dialog open for next participant
+        setInitiativeDialogOpen(true);
+      } else {
+        // All participants have initiatives, sort them
+        console.log('All participants have initiatives, final sorting');
+        setBattleParticipants(prev => [...prev].sort((a, b) => (b.initiative || 0) - (a.initiative || 0)));
+        setInitiativeDialogOpen(false);
+      }
     } else {
-      // All participants have initiatives, sort them
+      // No more remaining participants, sort and close dialog
+      console.log('No more remaining participants, final sorting');
       setBattleParticipants(prev => [...prev].sort((a, b) => (b.initiative || 0) - (a.initiative || 0)));
       setInitiativeDialogOpen(false);
     }
@@ -659,31 +702,19 @@ function App() {
     setLastAddedInitiative(null);
   }, [lastAddedInitiative, initiativeDialogOpen, battleParticipants, remainingParticipants]);
 
-  // Separate effect for sorting participants when all have initiatives
+  // When a tie is resolved, resume initiative dialog if there are more participants who need initiative
   useEffect(() => {
-    // Only sort if:
-    // 1. We have participants
-    // 2. All participants have initiatives
-    // 3. No initiative ties are being resolved
-    // 4. No initiative dialog is open
-    // 5. No remaining participants to process
     if (
-      battleParticipants.length > 0 &&
-      battleParticipants.every(p => p.initiative !== null && p.initiative !== undefined) &&
       !initiativeTie &&
+      remainingParticipants.length > 0 &&
       !initiativeDialogOpen &&
-      remainingParticipants.length === 0
+      // Only open if the next participant does not have initiative
+      (!battleParticipants.some(p => p.id === remainingParticipants[0].id) ||
+        battleParticipants.find(p => p.id === remainingParticipants[0].id)?.initiative == null)
     ) {
-      setBattleParticipants(prev => {
-        const sorted = [...prev].sort((a, b) => (b.initiative || 0) - (a.initiative || 0));
-        // Only update if the order has actually changed
-        if (JSON.stringify(sorted.map(p => p.battleId)) !== JSON.stringify(prev.map(p => p.battleId))) {
-          return sorted;
-        }
-        return prev;
-      });
+      setInitiativeDialogOpen(true);
     }
-  }, [battleParticipants, initiativeTie, initiativeDialogOpen, remainingParticipants]);
+  }, [initiativeTie, remainingParticipants, initiativeDialogOpen, battleParticipants]);
 
   // Expose window functions in a single effect
   useEffect(() => {
@@ -785,9 +816,24 @@ function App() {
     });
   }
 
+  // Add new function to handle temporary HP
+  const handleUpdateParticipantTempHP = (battleId, tempHP) => {
+    setBattleParticipants(prevParticipants => {
+      return prevParticipants.map(participant => {
+        if (participant.battleId !== battleId) return participant;
+        const clampedTempHP = Math.max(0, Number(tempHP));
+        let updated = { ...participant, tempHp: clampedTempHP };
+        if (updated.type === 'creature') {
+          updated.resistances = calculateCurrentResistances(updated);
+        }
+        return updated;
+      });
+    });
+  };
+
   return (
-    <div className="d-flex flex-column min-vh-100">
-      <Container fluid className="mt-3 flex-grow-1">
+    <div className="d-flex flex-column" style={{ height: '100dvh' }}>
+      <Container fluid className="mt-3 flex-grow-1" style={{ flex: '1 1 auto', overflowY: 'auto', minHeight: 0 }}>
         <audio ref={audioRef} src={fillip} />
         
         {showFillipMessage && (
@@ -954,7 +1000,7 @@ function App() {
         ) : null}
       </Container>
 
-      <footer className="bg-light py-3 mt-auto border-top">
+      <footer className="bg-light py-3 border-top" style={{ flexShrink: 0 }}>
         <Container fluid>
           <div className="d-flex justify-content-center">
             <Button 

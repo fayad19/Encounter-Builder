@@ -1,3 +1,12 @@
+--v.0.2
+- Added References Tab (Conditions, Weapon Traits and Crit Specialisations)
+- Added Resistance, Weakness and Immunities
+- Added and Tweaked Bestiary tab
+- Added and Tweaked Spells tab
+- Added dynamic resistance (Adamantine Dragon for example)
+
+
+
 --v.0.1.8
 - Tweaked responsive ui for small displays
 - Added Free action selection to spells
