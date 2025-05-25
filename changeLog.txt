@@ -1,3 +1,8 @@
+--v.0.2.1
+- Added Actions to creatures (special actions or non-attack actions)
+- Added collapsable menu for Attacks
+-
+
 --v.0.2
 - Added References Tab (Conditions, Weapon Traits and Crit Specialisations)
 - Added Resistance, Weakness and Immunities
