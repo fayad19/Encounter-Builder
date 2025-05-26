@@ -93,6 +93,7 @@ function MonsterDetailModal({ monster, show, onHide, onImportToCreatures }) {
       level: monster.level,
       dc: monster.system.attributes.spellDC?.value || null,
       attacks: [],
+      actions: [],
       resistances: allResistances,
       immunities: monster.system.attributes.immunities?.map(imm => ({
         type: imm.type,
@@ -163,6 +164,14 @@ function MonsterDetailModal({ monster, show, onHide, onImportToCreatures }) {
             spellAttack.targets = item.system.target.value;
           }
           creature.attacks.push(spellAttack);
+        } else if (item.type === 'action') {
+          creature.actions.push({
+            name: item.name,
+            actionType: item.system.actionType.value,
+            actions: item.system.actions?.value || null,
+            description: item.system.description?.value || '',
+            traits: item.system.traits?.value || []
+          });
         }
       });
     }

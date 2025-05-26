@@ -1,0 +1,39 @@
+/* Action List Item Styles */
+.action-list-item {
+  transition: background-color 0.2s ease;
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+
+.action-list-item:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.action-list-item:last-child {
+  margin-bottom: 0;
+}
+
+/* Action Modal Styles */
+.action-description {
+  font-size: 0.9em;
+  line-height: 1.5;
+  color: #333;
+}
+
+.action-description p {
+  margin-bottom: 0.5em;
+}
+
+.action-description p:last-child {
+  margin-bottom: 0;
+}
+
+/* Action Badge Styles */
+.action-badge {
+  font-size: 0.8em;
+  padding: 0.2em 0.5em;
+  margin-right: 0.5em;
+  background-color: #e9ecef;
+  color: #495057;
+  border-radius: 3px;
+} 

@@ -262,6 +262,7 @@ function BestiaryTab({ onAddCreature }) {
                         level: monsterData.level,
                         dc: monsterData.system.attributes.spellDC?.value || null,
                         attacks: [],
+                        actions: [],
                         resistances: allResistances,
                         immunities: monsterData.system.attributes.immunities?.map(imm => ({
                           type: imm.type,
@@ -324,6 +325,15 @@ function BestiaryTab({ onAddCreature }) {
                               spellAttack.targets = item.system.target.value;
                             }
                             creature.attacks.push(spellAttack);
+                          } else if (item.type === 'action') {
+                            creature.actions.push({
+                              name: item.name,
+                              actionType: item.system.actionType.value,
+                              actions: item.system.actions.value?.toString() || null,
+                              description: item.system.description.value,
+                              traits: item.system.traits.value || [],
+                              category: item.system.category || 'offensive'
+                            });
                           }
                         });
                       }
