@@ -1,3 +1,6 @@
+--v.0.2.2
+- ReAdded Actions of monsters
+
 --v.0.2.1
 - Added Actions to creatures (special actions or non-attack actions)
 - Added collapsable menu for Attacks

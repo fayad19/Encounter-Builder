@@ -9,7 +9,9 @@ import action1 from '../assets/action-1.png';
 import action2 from '../assets/action-2.png';
 import action3 from '../assets/action-3.png';
 import freeAction from '../assets/action-free.png';
+import reaction from '../assets/action-reaction.png';
 import CreatureAttackForm from './CreatureAttackForm';
+import CreatureActionForm from './CreatureActionForm';
 import { calculateCurrentResistances } from '../utils/creatureConversion';
 import quickRefData from '../data/quickRef.json';
 
@@ -111,6 +113,12 @@ function BattleTab({
   // Add state for showing condition modal
   const [showConditionModal, setShowConditionModal] = useState(false);
   const [conditionModalData, setConditionModalData] = useState(null);
+  const [weakDialogOpen, setWeakDialogOpen] = useState(false);
+  const [creatureToWeak, setCreatureToWeak] = useState(null);
+  const [eliteDialogOpen, setEliteDialogOpen] = useState(false);
+  const [creatureToElite, setCreatureToElite] = useState(null);
+  const [selectedAction, setSelectedAction] = useState(null);
+  const [showActionModal, setShowActionModal] = useState(false);
 
   const handleStartBattle = () => {
     if (participants.length > 0) {
@@ -784,11 +792,21 @@ function BattleTab({
   // Helper function to render a stat with conditional styling (optionally for a specific attack)
   const renderStat = (participant, stat, value, attack = null) => {
     const isAffected = isStatAffectedByConditions(participant, stat, attack);
+    const isModified = participant.isWeak || participant.isElite;
+    
     if (value === null || value === undefined || value === '' || (typeof value !== 'string' && typeof value !== 'number')) {
       return <span>—</span>;
     }
+    
+    let style = {};
+    if (isAffected) {
+      style.color = 'red';
+    } else if (isModified) {
+      style.color = '#ff6be4'; // Purple color for modified stats
+    }
+    
     return (
-      <span style={{ color: isAffected ? 'red' : 'inherit' }}>
+      <span style={style}>
         {value}
       </span>
     );
@@ -1032,6 +1050,257 @@ function BattleTab({
     document.addEventListener('click', handleConditionClick);
     return () => document.removeEventListener('click', handleConditionClick);
   }, []);
+
+  const handleWeakAdjustment = (creature) => {
+    // If creature is already elite, show warning
+    if (creature.isElite) {
+      alert('This creature is already Elite. Remove Elite status first to apply Weak adjustments.');
+      return;
+    }
+    // If creature is already weak, remove weak status
+    if (creature.isWeak) {
+      const updatedCreature = { ...creature, isWeak: false };
+      // Restore original stats
+      if (creature.originalStats) {
+        Object.entries(creature.originalStats).forEach(([key, value]) => {
+          updatedCreature[key] = value;
+        });
+        delete updatedCreature.originalStats;
+      }
+      onUpdateBattleParticipant(updatedCreature);
+      return;
+    }
+    
+    // Apply weak adjustments immediately
+    const updatedCreature = { ...creature, isWeak: true, isElite: false };
+    
+    // Store original stats if not already stored
+    if (!updatedCreature.originalStats) {
+      updatedCreature.originalStats = {
+        level: updatedCreature.level,
+        ac: updatedCreature.ac,
+        perception: updatedCreature.perception,
+        fortitude: updatedCreature.fortitude,
+        reflex: updatedCreature.reflex,
+        will: updatedCreature.will,
+        dc: updatedCreature.dc,
+        maxHp: updatedCreature.maxHp,
+        hp: updatedCreature.hp,
+        attacks: JSON.parse(JSON.stringify(updatedCreature.attacks || []))
+      };
+    }
+    
+    // Decrease level
+    if (updatedCreature.level) {
+      updatedCreature.level = Number(updatedCreature.level) - (Number(updatedCreature.level) === 1 ? 2 : 1);
+    }
+    
+    // Decrease AC, attack modifiers, DCs, saving throws and Perception
+    const statsToDecrease = ['ac', 'perception', 'fortitude', 'reflex', 'will', 'dc'];
+    statsToDecrease.forEach(stat => {
+      if (updatedCreature[stat]) {
+        updatedCreature[stat] = Number(updatedCreature[stat]) - 2;
+      }
+    });
+    
+    // Decrease HP based on level
+    if (updatedCreature.maxHp) {
+      const level = Number(updatedCreature.level) || 1;
+      let hpDecrease = 20; // default for levels 6-20
+      if (level <= 2) hpDecrease = 10;
+      else if (level <= 5) hpDecrease = 15;
+      else if (level >= 21) hpDecrease = 30;
+      
+      updatedCreature.maxHp = Number(updatedCreature.maxHp) - hpDecrease;
+      updatedCreature.hp = Math.min(Number(updatedCreature.hp), updatedCreature.maxHp);
+    }
+    
+    // Decrease damage of attacks
+    if (updatedCreature.attacks) {
+      updatedCreature.attacks = updatedCreature.attacks.map(attack => {
+        const updatedAttack = { ...attack };
+        if (attack.damage) {
+          // Check if it's a limited use ability (like spells)
+          const isLimitedUse = attack.attackType === 'spell' || attack.attackType === 'regularSpell';
+          const damageDecrease = isLimitedUse ? 4 : 2;
+          
+          // Try to parse and decrease damage value
+          try {
+            const damageMatch = attack.damage.match(/(\d+)/);
+            if (damageMatch) {
+              const currentDamage = Number(damageMatch[1]);
+              const newDamage = Math.max(1, currentDamage - damageDecrease);
+              updatedAttack.damage = attack.damage.replace(/\d+/, newDamage);
+            }
+          } catch (e) {
+            console.error('Error parsing damage value:', e);
+          }
+        }
+        return updatedAttack;
+      });
+    }
+    
+    // Update the creature in battle
+    if (onUpdateBattleParticipant) {
+      onUpdateBattleParticipant(updatedCreature);
+    }
+  };
+
+  const handleEliteAdjustment = (creature) => {
+    // If creature is already weak, show warning
+    if (creature.isWeak) {
+      alert('This creature is already Weak. Remove Weak status first to apply Elite adjustments.');
+      return;
+    }
+    // If creature is already elite, remove elite status
+    if (creature.isElite) {
+      const updatedCreature = { ...creature, isElite: false };
+      // Restore original stats
+      if (creature.originalStats) {
+        Object.entries(creature.originalStats).forEach(([key, value]) => {
+          updatedCreature[key] = value;
+        });
+        delete updatedCreature.originalStats;
+      }
+      onUpdateBattleParticipant(updatedCreature);
+      return;
+    }
+    
+    // Apply elite adjustments immediately
+    const updatedCreature = { ...creature, isElite: true, isWeak: false };
+    
+    // Store original stats if not already stored
+    if (!updatedCreature.originalStats) {
+      updatedCreature.originalStats = {
+        level: updatedCreature.level,
+        ac: updatedCreature.ac,
+        perception: updatedCreature.perception,
+        fortitude: updatedCreature.fortitude,
+        reflex: updatedCreature.reflex,
+        will: updatedCreature.will,
+        dc: updatedCreature.dc,
+        maxHp: updatedCreature.maxHp,
+        hp: updatedCreature.hp,
+        attacks: JSON.parse(JSON.stringify(updatedCreature.attacks || []))
+      };
+    }
+    
+    // Increase level
+    if (updatedCreature.level) {
+      updatedCreature.level = Number(updatedCreature.level) + 1;
+    }
+    
+    // Increase AC, attack modifiers, DCs, saving throws and Perception
+    const statsToIncrease = ['ac', 'perception', 'fortitude', 'reflex', 'will', 'dc'];
+    statsToIncrease.forEach(stat => {
+      if (updatedCreature[stat]) {
+        updatedCreature[stat] = Number(updatedCreature[stat]) + 2;
+      }
+    });
+    
+    // Increase HP based on level
+    if (updatedCreature.maxHp) {
+      const level = Number(updatedCreature.level) || 1;
+      let hpIncrease = 20; // default for levels 6-20
+      if (level <= 2) hpIncrease = 10;
+      else if (level <= 5) hpIncrease = 15;
+      else if (level >= 21) hpIncrease = 30;
+      
+      updatedCreature.maxHp = Number(updatedCreature.maxHp) + hpIncrease;
+      updatedCreature.hp = Math.min(Number(updatedCreature.hp) + hpIncrease, updatedCreature.maxHp);
+    }
+    
+    // Increase damage of attacks
+    if (updatedCreature.attacks) {
+      updatedCreature.attacks = updatedCreature.attacks.map(attack => {
+        const updatedAttack = { ...attack };
+        if (attack.damage) {
+          // Check if it's a limited use ability (like spells)
+          const isLimitedUse = attack.attackType === 'spell' || attack.attackType === 'regularSpell';
+          const damageIncrease = isLimitedUse ? 4 : 2;
+          
+          // Try to parse and increase damage value
+          try {
+            const damageMatch = attack.damage.match(/(\d+)/);
+            if (damageMatch) {
+              const currentDamage = Number(damageMatch[1]);
+              const newDamage = currentDamage + damageIncrease;
+              updatedAttack.damage = attack.damage.replace(/\d+/, newDamage);
+            }
+          } catch (e) {
+            console.error('Error parsing damage value:', e);
+          }
+        }
+        return updatedAttack;
+      });
+    }
+    
+    // Update the creature in battle
+    if (onUpdateBattleParticipant) {
+      onUpdateBattleParticipant(updatedCreature);
+    }
+  };
+
+  const renderCreatureActions = (creature) => {
+    if (!creature.actions || creature.actions.length === 0) return null;
+
+    return (
+      <div className="mt-2">
+        <strong style={{ fontSize: '0.9em' }}>Actions:</strong>
+        <ul className="mb-0 ps-3" style={{ fontSize: '0.9em' }}>
+          {creature.actions.map((action, index) => {
+            const actionKey = `${creature.battleId}-action-${index}`;
+            const isExpanded = expandedSpells[actionKey];
+            let icon = null;
+            if (action.actionType === 'action') {
+              if (action.actions === '1') icon = action1;
+              else if (action.actions === '2') icon = action2;
+              else if (action.actions === '3') icon = action3;
+            } else if (action.actionType === 'reaction') {
+              icon = reaction;
+            }
+
+            return (
+              <li key={actionKey} style={{ listStyleType: 'circle', cursor: action.description ? 'pointer' : 'default' }} onClick={() => action.description && setExpandedSpells(prev => ({ ...prev, [actionKey]: !prev[actionKey] }))}>
+                <span className="text-muted"></span> <strong style={{ marginLeft: 4, fontSize: '0.9em' }}>{action.name}</strong>
+                {icon && (
+                  <img
+                    src={icon}
+                    alt={`${action.actions} action(s)`}
+                    style={{ height: '1.2em', verticalAlign: 'middle', marginLeft: 8, marginRight: 4 }}
+                  />
+                )}
+                {action.description && (
+                  <span className="ms-2" style={{ fontSize: '0.8em', color: '#666' }}>{isExpanded ? '▼' : '▶'}</span>
+                )}
+                {isExpanded && action.description && (
+                  <div
+                    className="mt-1 mb-1"
+                    style={{ marginLeft: 24, padding: '8px', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #dee2e6' }}
+                    onClick={e => {
+                      const target = e.target;
+                      if (target.classList && target.classList.contains('condition-link')) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const condName = target.getAttribute('data-condition');
+                        const found = conditionList.find(c => c.name === condName);
+                        if (found) {
+                          setConditionModalData(found);
+                          setShowConditionModal(true);
+                        }
+                      }
+                    }}
+                  >
+                    {renderSpellDescription(action.description)}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  };
 
   return (
     <>
@@ -1514,6 +1783,11 @@ function BattleTab({
                                 </div>
                               )}
                             </div>
+                            {participant.type === 'creature' && participant.actions && participant.actions.length > 0 && (
+                              <div className="mt-2">
+                                {renderCreatureActions(participant)}
+                              </div>
+                            )}
                             {participant.conditions && Object.entries(participant.conditions).length > 0 && (
                               <div className="mt-2">
                                 <strong>Conditions:</strong>
@@ -1621,14 +1895,32 @@ function BattleTab({
                               <Trash />
                             </Button>
                             {participant.type === 'creature' && (
-                              <Button
-                                variant={currentTurn === participant.battleId ? "light" : "outline-primary"}
-                                size="sm"
-                                className="ms-1"
-                                onClick={() => handleEditCreatureClick(participant)}
-                              >
-                                <Pencil />
-                              </Button>
+                              <>
+                                <Button
+                                  variant={currentTurn === participant.battleId ? "light" : participant.isWeak ? "warning" : "outline-warning"}
+                                  size="sm"
+                                  className="ms-1"
+                                  onClick={() => handleWeakAdjustment(participant)}
+                                >
+                                  {participant.isWeak ? 'WEAK ✓' : 'WEAK'}
+                                </Button>
+                                <Button
+                                  variant={currentTurn === participant.battleId ? "light" : participant.isElite ? "success" : "outline-success"}
+                                  size="sm"
+                                  className="ms-1"
+                                  onClick={() => handleEliteAdjustment(participant)}
+                                >
+                                  {participant.isElite ? 'ELITE ✓' : 'ELITE'}
+                                </Button>
+                                <Button
+                                  variant={currentTurn === participant.battleId ? "light" : "outline-primary"}
+                                  size="sm"
+                                  className="ms-1"
+                                  onClick={() => handleEditCreatureClick(participant)}
+                                >
+                                  <Pencil />
+                                </Button>
+                              </>
                             )}
                           </div>
                           {provided.placeholder}
@@ -1866,7 +2158,35 @@ function BattleTab({
                             onRemoveAttack={index => setCreatureToEdit(prev => ({ ...prev, attacks: prev.attacks.filter((_, i) => i !== index) }))}
                           />
                         </div>
-                        <div className="d-flex gap-2 justify-content-end">
+
+                        <div className="mb-3">
+                          <div className="d-flex justify-content-between align-items-center mb-2">
+                            <h6 className="mb-0">Actions</h6>
+                          </div>
+                          <CreatureActionForm
+                            actions={creatureToEdit.actions || []}
+                            onChange={actions => setCreatureToEdit(prev => ({ ...prev, actions }))}
+                            onAddAction={type => setCreatureToEdit(prev => ({
+                              ...prev,
+                              actions: [
+                                ...(prev.actions || []),
+                                {
+                                  name: '',
+                                  actionType: type,
+                                  actions: type === 'action' ? '1' : null,
+                                  description: '',
+                                  traits: []
+                                }
+                              ]
+                            }))}
+                            onRemoveAction={index => setCreatureToEdit(prev => ({
+                              ...prev,
+                              actions: prev.actions.filter((_, i) => i !== index)
+                            }))}
+                          />
+                        </div>
+
+                        <div className="d-flex justify-content-end gap-2">
                           <Button variant="secondary" onClick={() => setEditCreatureDialogOpen(false)} type="button">Cancel</Button>
                           <Button variant="primary" type="submit">Save</Button>
                         </div>

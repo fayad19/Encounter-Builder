@@ -5,6 +5,7 @@ import DeleteConfirmationDialog from './DeleteConfirmationDialog';
 import Dropdown from 'react-bootstrap/Dropdown';
 import DropdownButton from 'react-bootstrap/DropdownButton';
 import CreatureAttackForm from './CreatureAttackForm';
+import CreatureActionForm from './CreatureActionForm';
 
 function CreaturesTab({ 
   savedCreatures = [], 
@@ -19,7 +20,8 @@ function CreaturesTab({
     ac: '',
     //initiative: '',
     penalty: '',
-    attacks: [] // Start with no attacks
+    attacks: [],
+    actions: [] // Add actions array
   });
   const [editingCreature, setEditingCreature] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -88,6 +90,35 @@ function CreaturesTab({
     }));
   };
 
+  const handleAddAction = (type) => {
+    setNewCreature(prev => ({
+      ...prev,
+      actions: [
+        ...prev.actions,
+        {
+          name: '',
+          actionType: type,
+          actions: type === 'action' ? '1' : null,
+          description: ''
+        }
+      ]
+    }));
+  };
+
+  const handleRemoveAction = (index) => {
+    setNewCreature(prev => ({
+      ...prev,
+      actions: prev.actions.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleActionChange = (actions) => {
+    setNewCreature(prev => ({
+      ...prev,
+      actions
+    }));
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (newCreature.name) {
@@ -106,7 +137,8 @@ function CreaturesTab({
         ac: '',
         //initiative: '',
         penalty: '',
-        attacks: []
+        attacks: [],
+        actions: []
       });
     }
   };
@@ -118,7 +150,8 @@ function CreaturesTab({
       ac: creature.ac,
       //initiative: creature.initiative,
       penalty: creature.penalty,
-      attacks: creature.attacks || []
+      attacks: creature.attacks || [],
+      actions: creature.actions || []
     });
     setEditingCreature(creature);
   };
@@ -131,7 +164,8 @@ function CreaturesTab({
       ac: '',
       //initiative: '',
       penalty: '',
-      attacks: []
+      attacks: [],
+      actions: []
     });
   };
 
@@ -234,6 +268,14 @@ function CreaturesTab({
                   onChange={attacks => setNewCreature(prev => ({ ...prev, attacks }))}
                   onAddAttack={handleAddAttack}
                   onRemoveAttack={handleRemoveAttack}
+                />
+
+                {/* Actions Section */}
+                <CreatureActionForm
+                  actions={newCreature.actions}
+                  onChange={handleActionChange}
+                  onAddAction={handleAddAction}
+                  onRemoveAction={handleRemoveAction}
                 />
                 
                 <div className="d-flex gap-2">

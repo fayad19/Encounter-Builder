@@ -5,6 +5,7 @@ import DeleteConfirmationDialog from './DeleteConfirmationDialog';
 import Dropdown from 'react-bootstrap/Dropdown';
 import DropdownButton from 'react-bootstrap/DropdownButton';
 import CreatureAttackForm from './CreatureAttackForm';
+import CreatureActionForm from './CreatureActionForm';
 
 function CreaturesTab({ 
   savedCreatures = [], 
@@ -25,7 +26,8 @@ function CreaturesTab({
     attacks: [], // Start with no attacks
     resistances: [], // Add resistances array
     immunities: [], // Add immunities array
-    weaknesses: [] // Add weaknesses array
+    weaknesses: [], // Add weaknesses array
+    actions: [] // Add actions array
   });
   const [editingCreature, setEditingCreature] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -194,7 +196,8 @@ function CreaturesTab({
         attacks: [],
         resistances: [],
         immunities: [],
-        weaknesses: []
+        weaknesses: [],
+        actions: []
       });
     }
   };
@@ -214,7 +217,8 @@ function CreaturesTab({
       attacks: creature.attacks || [],
       resistances: creature.resistances || [],
       immunities: creature.immunities || [],
-      weaknesses: creature.weaknesses || []
+      weaknesses: creature.weaknesses || [],
+      actions: creature.actions || []
     });
     setEditingCreature(creature);
   };
@@ -230,7 +234,8 @@ function CreaturesTab({
       attacks: [],
       resistances: [],
       immunities: [],
-      weaknesses: []
+      weaknesses: [],
+      actions: []
     });
   };
 
@@ -526,6 +531,29 @@ function CreaturesTab({
                   onChange={attacks => setNewCreature(prev => ({ ...prev, attacks }))}
                   onAddAttack={handleAddAttack}
                   onRemoveAttack={handleRemoveAttack}
+                />
+
+                {/* Actions Section */}
+                <CreatureActionForm
+                  actions={newCreature.actions}
+                  onChange={actions => setNewCreature(prev => ({ ...prev, actions }))}
+                  onAddAction={type => setNewCreature(prev => ({
+                    ...prev,
+                    actions: [
+                      ...prev.actions,
+                      {
+                        name: '',
+                        actionType: type,
+                        actions: type === 'action' ? '1' : null,
+                        description: '',
+                        traits: []
+                      }
+                    ]
+                  }))}
+                  onRemoveAction={index => setNewCreature(prev => ({
+                    ...prev,
+                    actions: prev.actions.filter((_, i) => i !== index)
+                  }))}
                 />
                 
                 <div className="d-flex gap-2">
