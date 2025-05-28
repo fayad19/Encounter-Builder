@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Container, Nav, Tab, Button, Modal, Alert } from 'react-bootstrap';
+import { Container, Nav, Tab, Button, Modal, Alert, Image } from 'react-bootstrap';
 import CreaturesTab from './components/CreaturesTab';
 import BattleTab from './components/BattleTab';
 import PlayersTab from './components/PlayersTab';
@@ -7,6 +7,7 @@ import BestiaryTab from './components/BestiaryTab';
 import InitiativeDialog from './components/InitiativeDialog';
 import fillip from './assets/fillip.mp3';
 import fillipBg from './assets/fillip.jpg';
+import kidMeme from './assets/kid-meme.gif';
 import SpellsTab from './components/SpellsTab';
 import { loadMonstersIntoDB, isDatabasePopulated as isMonsterDBPopulated } from './services/monsterDB';
 import { loadSpellsIntoDB, isDatabasePopulated as isSpellDBPopulated } from './services/spellDB';
@@ -18,6 +19,7 @@ function App() {
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
   const [showStopConfirmModal, setShowStopConfirmModal] = useState(false);
   const [showFillipMessage, setShowFillipMessage] = useState(false);
+  const [showKidMeme, setShowKidMeme] = useState(false);
   const [battleTabStyle, setBattleTabStyle] = useState({});
   const [showBattleContent, setShowBattleContent] = useState(true);
 
@@ -38,6 +40,7 @@ function App() {
           console.log('Audio playback failed:', error);
         });
         setIsMusicPlaying(true);
+        setShowKidMeme(true);
       }
     }
   };
@@ -54,6 +57,7 @@ function App() {
     });
     setShowBattleContent(false);
     setShowStopConfirmModal(false);
+    setShowKidMeme(false);
   };
 
   const handleStopCancel = () => {
@@ -869,6 +873,12 @@ function App() {
               <Nav.Link eventKey="references">References</Nav.Link>
             </Nav.Item>
           </Nav>
+
+          {showKidMeme && (
+            <div className="text-center mb-3">
+              <Image src={kidMeme} alt="Kid Meme" fluid style={{ maxHeight: '200px' }} />
+            </div>
+          )}
 
           <Tab.Content>
             <Tab.Pane eventKey="battle" style={currentTab === 'battle' ? battleTabStyle : {}}>

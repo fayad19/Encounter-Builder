@@ -249,6 +249,17 @@ function BestiaryTab({ onAddCreature }) {
                         allResistancesMap.set(resistanceKey(r), r);
                       });
                       const allResistances = Array.from(allResistancesMap.values());
+
+                      // Calculate spell DC and attack modifier
+                      const mentalScores = {
+                        int: monsterData.system.abilities.int.mod,
+                        wis: monsterData.system.abilities.wis.mod,
+                        cha: monsterData.system.abilities.cha.mod
+                      };
+                      const highestMental = Math.max(...Object.values(mentalScores));
+                      const spellDC = 10 + monsterData.level + highestMental;
+                      const spellAttackMod = monsterData.level + highestMental;
+
                       const creature = {
                         id: Date.now(),
                         name: monsterData.name,
@@ -260,7 +271,8 @@ function BestiaryTab({ onAddCreature }) {
                         reflex: monsterData.system.saves.reflex.value,
                         will: monsterData.system.saves.will.value,
                         level: monsterData.level,
-                        dc: monsterData.system.attributes.spellDC?.value || null,
+                        dc: spellDC,
+                        spellAttackMod: spellAttackMod,
                         attacks: [],
                         actions: [],
                         resistances: allResistances,
