@@ -1,3 +1,8 @@
+--v.0.2.3
+- Added Attacks&Actions tab to hide long list of actions and Attacks.
+- Added DC and Spell Attack Modifier to monsters.
+- Added Weak and Elite creatures.
+
 --v.0.2.2
 - ReAdded Actions of monsters
 

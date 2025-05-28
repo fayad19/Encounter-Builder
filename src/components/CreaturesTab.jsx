@@ -23,6 +23,8 @@ function CreaturesTab({
     reflex: '',
     will: '',
     penalty: '',
+    dc: '',
+    spellAttackMod: '',
     attacks: [], // Start with no attacks
     resistances: [], // Add resistances array
     immunities: [], // Add immunities array
@@ -213,6 +215,7 @@ function CreaturesTab({
       will: creature.will || '',
       level: creature.level || '',
       dc: creature.dc || '',
+      spellAttackMod: creature.spellAttackMod || '',
       penalty: creature.penalty || '',
       attacks: creature.attacks || [],
       resistances: creature.resistances || [],
@@ -229,7 +232,12 @@ function CreaturesTab({
       name: '',
       hp: '',
       ac: '',
-      //initiative: '',
+      perception: '',
+      fortitude: '',
+      reflex: '',
+      will: '',
+      dc: '',
+      spellAttackMod: '',
       penalty: '',
       attacks: [],
       resistances: [],
@@ -308,7 +316,7 @@ function CreaturesTab({
                 </Row>
                 
                 <Row>
-                  <Col md={4}>
+                  <Col md={3}>
                     <Form.Group className="mb-3">
                       <Form.Label>HP</Form.Label>
                       <Form.Control
@@ -320,7 +328,7 @@ function CreaturesTab({
                       />
                     </Form.Group>
                   </Col>
-                  <Col md={4}>
+                  <Col md={3}>
                     <Form.Group className="mb-3">
                       <Form.Label>AC</Form.Label>
                       <Form.Control
@@ -332,7 +340,7 @@ function CreaturesTab({
                       />
                     </Form.Group>
                   </Col>
-                  <Col md={4}>
+                  <Col md={3}>
                     <Form.Group className="mb-3">
                       <Form.Label>DC</Form.Label>
                       <Form.Control
@@ -341,6 +349,18 @@ function CreaturesTab({
                         value={newCreature.dc}
                         onChange={handleInputChange}
                         placeholder="Enter DC"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={3}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Spell Attack Mod</Form.Label>
+                      <Form.Control
+                        type="number"
+                        name="spellAttackMod"
+                        value={newCreature.spellAttackMod}
+                        onChange={handleInputChange}
+                        placeholder="Enter Spell Attack Mod"
                       />
                     </Form.Group>
                   </Col>

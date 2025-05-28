@@ -80,6 +80,26 @@ function MonsterDetailModal({ monster, show, onHide, onImportToCreatures }) {
     const allResistances = Array.from(allResistancesMap.values());
 
     // Define the creature object first, so attacks can be added to it
+    const calculateSpellStats = (monster) => {
+      // Find the highest mental ability score (INT, WIS, or CHA)
+      const mentalScores = {
+        int: monster.system.abilities.int.mod,
+        wis: monster.system.abilities.wis.mod,
+        cha: monster.system.abilities.cha.mod
+      };
+      const highestMental = Math.max(...Object.values(mentalScores));
+      
+      // Calculate spell DC and attack modifier
+      // DC = 10 + monster level + highest mental ability modifier
+      // Spell Attack = monster level + highest mental ability modifier
+      const spellDC = 10 + monster.level + highestMental;
+      const spellAttackMod = monster.level + highestMental;
+      
+      return { spellDC, spellAttackMod };
+    };
+
+    const { spellDC, spellAttackMod } = calculateSpellStats(monster);
+
     const creature = {
       id: Date.now(),
       name: monster.name,
@@ -91,7 +111,8 @@ function MonsterDetailModal({ monster, show, onHide, onImportToCreatures }) {
       reflex: monster.system.saves.reflex.value,
       will: monster.system.saves.will.value,
       level: monster.level,
-      dc: monster.system.attributes.spellDC?.value || null,
+      dc: spellDC,
+      spellAttackMod: spellAttackMod,
       attacks: [],
       actions: [],
       resistances: allResistances,

@@ -104,6 +104,7 @@ function BattleTab({
   const [tempHpInputValues, setTempHpInputValues] = useState({});
   const [showConditionsMenu, setShowConditionsMenu] = useState(true);
   const [expandedSpells, setExpandedSpells] = useState({});
+  const [expandedAttacks, setExpandedAttacks] = useState({});
   const [persistentDamageDialog, setPersistentDamageDialog] = useState({
     show: false,
     participantId: null,
@@ -953,6 +954,11 @@ function BattleTab({
       const currentParticipant = participants.find(p => p.battleId === currentTurn);
       if (currentParticipant) {
         handlePersistentDamage(currentParticipant);
+        // Collapse the attacks section for the current participant
+        setExpandedAttacks(prev => ({
+          ...prev,
+          [currentTurn]: false
+        }));
       }
       onFinishTurn();
     }
@@ -1057,52 +1063,54 @@ function BattleTab({
       alert('This creature is already Elite. Remove Elite status first to apply Weak adjustments.');
       return;
     }
-    // If creature is already weak, remove weak status
+    // If creature is already weak, remove weak status and restore original stats
     if (creature.isWeak) {
-      const updatedCreature = { ...creature, isWeak: false };
-      // Restore original stats
       if (creature.originalStats) {
-        Object.entries(creature.originalStats).forEach(([key, value]) => {
-          updatedCreature[key] = value;
-        });
-        delete updatedCreature.originalStats;
+        const restored = { ...creature, ...creature.originalStats, isWeak: false };
+        delete restored.originalStats;
+        onUpdateBattleParticipant(restored);
+      } else {
+        onUpdateBattleParticipant({ ...creature, isWeak: false });
       }
-      onUpdateBattleParticipant(updatedCreature);
       return;
     }
-    
-    // Apply weak adjustments immediately
-    const updatedCreature = { ...creature, isWeak: true, isElite: false };
-    
-    // Store original stats if not already stored
-    if (!updatedCreature.originalStats) {
-      updatedCreature.originalStats = {
-        level: updatedCreature.level,
-        ac: updatedCreature.ac,
-        perception: updatedCreature.perception,
-        fortitude: updatedCreature.fortitude,
-        reflex: updatedCreature.reflex,
-        will: updatedCreature.will,
-        dc: updatedCreature.dc,
-        maxHp: updatedCreature.maxHp,
-        hp: updatedCreature.hp,
-        attacks: JSON.parse(JSON.stringify(updatedCreature.attacks || []))
-      };
+
+    // If switching from Elite to Weak, restore original stats first
+    let baseStats = creature;
+    if (creature.isElite && creature.originalStats) {
+      baseStats = { ...creature, ...creature.originalStats, isElite: false };
+      delete baseStats.originalStats;
     }
-    
+
+    // Store original stats
+    const originalStats = {
+      level: baseStats.level,
+      ac: baseStats.ac,
+      perception: baseStats.perception,
+      fortitude: baseStats.fortitude,
+      reflex: baseStats.reflex,
+      will: baseStats.will,
+      dc: baseStats.dc,
+      spellAttackMod: baseStats.spellAttackMod,
+      maxHp: baseStats.maxHp,
+      hp: baseStats.hp,
+      attacks: JSON.parse(JSON.stringify(baseStats.attacks || []))
+    };
+    let updatedCreature = { ...baseStats, isWeak: true, isElite: false, originalStats };
+
     // Decrease level
     if (updatedCreature.level) {
       updatedCreature.level = Number(updatedCreature.level) - (Number(updatedCreature.level) === 1 ? 2 : 1);
     }
-    
+
     // Decrease AC, attack modifiers, DCs, saving throws and Perception
-    const statsToDecrease = ['ac', 'perception', 'fortitude', 'reflex', 'will', 'dc'];
+    const statsToDecrease = ['ac', 'perception', 'fortitude', 'reflex', 'will', 'dc', 'spellAttackMod'];
     statsToDecrease.forEach(stat => {
-      if (updatedCreature[stat]) {
+      if (updatedCreature[stat] !== undefined && updatedCreature[stat] !== null) {
         updatedCreature[stat] = Number(updatedCreature[stat]) - 2;
       }
     });
-    
+
     // Decrease HP based on level
     if (updatedCreature.maxHp) {
       const level = Number(updatedCreature.level) || 1;
@@ -1110,27 +1118,24 @@ function BattleTab({
       if (level <= 2) hpDecrease = 10;
       else if (level <= 5) hpDecrease = 15;
       else if (level >= 21) hpDecrease = 30;
-      
       updatedCreature.maxHp = Number(updatedCreature.maxHp) - hpDecrease;
       updatedCreature.hp = Math.min(Number(updatedCreature.hp), updatedCreature.maxHp);
     }
-    
+
     // Decrease damage of attacks
     if (updatedCreature.attacks) {
       updatedCreature.attacks = updatedCreature.attacks.map(attack => {
         const updatedAttack = { ...attack };
         if (attack.damage) {
-          // Check if it's a limited use ability (like spells)
           const isLimitedUse = attack.attackType === 'spell' || attack.attackType === 'regularSpell';
           const damageDecrease = isLimitedUse ? 4 : 2;
-          
-          // Try to parse and decrease damage value
           try {
-            const damageMatch = attack.damage.match(/(\d+)/);
+            const damageMatch = attack.damage.match(/(\d+)d(\d+)([+-]\d+)?(?:\s+(\w+))?/);
             if (damageMatch) {
-              const currentDamage = Number(damageMatch[1]);
-              const newDamage = Math.max(1, currentDamage - damageDecrease);
-              updatedAttack.damage = attack.damage.replace(/\d+/, newDamage);
+              const [_, dice, sides, modifier, damageType] = damageMatch;
+              const modValue = modifier ? parseInt(modifier) : 0;
+              const newModValue = Math.max(0, modValue - damageDecrease);
+              updatedAttack.damage = `${dice}d${sides}${newModValue > 0 ? '+' + newModValue : ''}${damageType ? ' ' + damageType : ''}`;
             }
           } catch (e) {
             console.error('Error parsing damage value:', e);
@@ -1139,11 +1144,8 @@ function BattleTab({
         return updatedAttack;
       });
     }
-    
-    // Update the creature in battle
-    if (onUpdateBattleParticipant) {
-      onUpdateBattleParticipant(updatedCreature);
-    }
+
+    onUpdateBattleParticipant(updatedCreature);
   };
 
   const handleEliteAdjustment = (creature) => {
@@ -1152,52 +1154,54 @@ function BattleTab({
       alert('This creature is already Weak. Remove Weak status first to apply Elite adjustments.');
       return;
     }
-    // If creature is already elite, remove elite status
+    // If creature is already elite, remove elite status and restore original stats
     if (creature.isElite) {
-      const updatedCreature = { ...creature, isElite: false };
-      // Restore original stats
       if (creature.originalStats) {
-        Object.entries(creature.originalStats).forEach(([key, value]) => {
-          updatedCreature[key] = value;
-        });
-        delete updatedCreature.originalStats;
+        const restored = { ...creature, ...creature.originalStats, isElite: false };
+        delete restored.originalStats;
+        onUpdateBattleParticipant(restored);
+      } else {
+        onUpdateBattleParticipant({ ...creature, isElite: false });
       }
-      onUpdateBattleParticipant(updatedCreature);
       return;
     }
-    
-    // Apply elite adjustments immediately
-    const updatedCreature = { ...creature, isElite: true, isWeak: false };
-    
-    // Store original stats if not already stored
-    if (!updatedCreature.originalStats) {
-      updatedCreature.originalStats = {
-        level: updatedCreature.level,
-        ac: updatedCreature.ac,
-        perception: updatedCreature.perception,
-        fortitude: updatedCreature.fortitude,
-        reflex: updatedCreature.reflex,
-        will: updatedCreature.will,
-        dc: updatedCreature.dc,
-        maxHp: updatedCreature.maxHp,
-        hp: updatedCreature.hp,
-        attacks: JSON.parse(JSON.stringify(updatedCreature.attacks || []))
-      };
+
+    // If switching from Weak to Elite, restore original stats first
+    let baseStats = creature;
+    if (creature.isWeak && creature.originalStats) {
+      baseStats = { ...creature, ...creature.originalStats, isWeak: false };
+      delete baseStats.originalStats;
     }
-    
+
+    // Store original stats
+    const originalStats = {
+      level: baseStats.level,
+      ac: baseStats.ac,
+      perception: baseStats.perception,
+      fortitude: baseStats.fortitude,
+      reflex: baseStats.reflex,
+      will: baseStats.will,
+      dc: baseStats.dc,
+      spellAttackMod: baseStats.spellAttackMod,
+      maxHp: baseStats.maxHp,
+      hp: baseStats.hp,
+      attacks: JSON.parse(JSON.stringify(baseStats.attacks || []))
+    };
+    let updatedCreature = { ...baseStats, isElite: true, isWeak: false, originalStats };
+
     // Increase level
     if (updatedCreature.level) {
       updatedCreature.level = Number(updatedCreature.level) + 1;
     }
-    
+
     // Increase AC, attack modifiers, DCs, saving throws and Perception
-    const statsToIncrease = ['ac', 'perception', 'fortitude', 'reflex', 'will', 'dc'];
+    const statsToIncrease = ['ac', 'perception', 'fortitude', 'reflex', 'will', 'dc', 'spellAttackMod'];
     statsToIncrease.forEach(stat => {
-      if (updatedCreature[stat]) {
+      if (updatedCreature[stat] !== undefined && updatedCreature[stat] !== null) {
         updatedCreature[stat] = Number(updatedCreature[stat]) + 2;
       }
     });
-    
+
     // Increase HP based on level
     if (updatedCreature.maxHp) {
       const level = Number(updatedCreature.level) || 1;
@@ -1205,27 +1209,24 @@ function BattleTab({
       if (level <= 2) hpIncrease = 10;
       else if (level <= 5) hpIncrease = 15;
       else if (level >= 21) hpIncrease = 30;
-      
       updatedCreature.maxHp = Number(updatedCreature.maxHp) + hpIncrease;
       updatedCreature.hp = Math.min(Number(updatedCreature.hp) + hpIncrease, updatedCreature.maxHp);
     }
-    
+
     // Increase damage of attacks
     if (updatedCreature.attacks) {
       updatedCreature.attacks = updatedCreature.attacks.map(attack => {
         const updatedAttack = { ...attack };
         if (attack.damage) {
-          // Check if it's a limited use ability (like spells)
           const isLimitedUse = attack.attackType === 'spell' || attack.attackType === 'regularSpell';
           const damageIncrease = isLimitedUse ? 4 : 2;
-          
-          // Try to parse and increase damage value
           try {
-            const damageMatch = attack.damage.match(/(\d+)/);
+            const damageMatch = attack.damage.match(/(\d+)d(\d+)([+-]\d+)?(?:\s+(\w+))?/);
             if (damageMatch) {
-              const currentDamage = Number(damageMatch[1]);
-              const newDamage = currentDamage + damageIncrease;
-              updatedAttack.damage = attack.damage.replace(/\d+/, newDamage);
+              const [_, dice, sides, modifier, damageType] = damageMatch;
+              const modValue = modifier ? parseInt(modifier) : 0;
+              const newModValue = modValue + damageIncrease;
+              updatedAttack.damage = `${dice}d${sides}+${newModValue}${damageType ? ' ' + damageType : ''}`;
             }
           } catch (e) {
             console.error('Error parsing damage value:', e);
@@ -1234,11 +1235,8 @@ function BattleTab({
         return updatedAttack;
       });
     }
-    
-    // Update the creature in battle
-    if (onUpdateBattleParticipant) {
-      onUpdateBattleParticipant(updatedCreature);
-    }
+
+    onUpdateBattleParticipant(updatedCreature);
   };
 
   const renderCreatureActions = (creature) => {
@@ -1246,8 +1244,8 @@ function BattleTab({
 
     return (
       <div className="mt-2">
-        <strong style={{ fontSize: '0.9em' }}>Actions:</strong>
-        <ul className="mb-0 ps-3" style={{ fontSize: '0.9em' }}>
+        <strong >Actions:</strong>
+        <ul className="mb-0 ps-3">
           {creature.actions.map((action, index) => {
             const actionKey = `${creature.battleId}-action-${index}`;
             const isExpanded = expandedSpells[actionKey];
@@ -1262,7 +1260,7 @@ function BattleTab({
 
             return (
               <li key={actionKey} style={{ listStyleType: 'circle', cursor: action.description ? 'pointer' : 'default' }} onClick={() => action.description && setExpandedSpells(prev => ({ ...prev, [actionKey]: !prev[actionKey] }))}>
-                <span className="text-muted"></span> <strong style={{ marginLeft: 4, fontSize: '0.9em' }}>{action.name}</strong>
+                <span className="text-muted"></span> <strong style={{ marginLeft: 4 }}>{action.name}</strong>
                 {icon && (
                   <img
                     src={icon}
@@ -1301,6 +1299,50 @@ function BattleTab({
       </div>
     );
   };
+
+  const handleEliteToggle = (creature) => {
+    if (creature.isElite) {
+      const updatedCreature = { ...creature, isElite: false };
+      if (creature.originalStats) {
+        Object.entries(creature.originalStats).forEach(([key, value]) => {
+          updatedCreature[key] = value;
+        });
+        delete updatedCreature.originalStats;
+      }
+      onUpdateCreature(updatedCreature);
+      setEliteDialogOpen(false);
+      setCreatureToElite(null);
+      return;
+    }
+    // ... existing code ...
+  };
+
+  const handleWeakToggle = (creature) => {
+    if (creature.isWeak) {
+      const updatedCreature = { ...creature, isWeak: false };
+      if (creature.originalStats) {
+        Object.entries(creature.originalStats).forEach(([key, value]) => {
+          updatedCreature[key] = value;
+        });
+        delete updatedCreature.originalStats;
+      }
+      onUpdateCreature(updatedCreature);
+      setWeakDialogOpen(false);
+      setCreatureToWeak(null);
+      return;
+    }
+    // ... existing code ...
+  };
+
+  // Add this effect to automatically expand attacks for the current turn
+  useEffect(() => {
+    if (currentTurn) {
+      setExpandedAttacks(prev => ({
+        ...prev,
+        [currentTurn]: true
+      }));
+    }
+  }, [currentTurn]);
 
   return (
     <>
@@ -1473,15 +1515,12 @@ function BattleTab({
                                       Level: {renderStat(participant, 'level', participant.level)}
                                     </span>
                                   </div>
-                                  <div>
-                                    <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
-                                      Fortitude: {renderStat(participant, 'fortitude', participant.fortitude)}
-                                      <span className="ms-2">
-                                        Reflex: {renderStat(participant, 'reflex', participant.reflex)}
-                                      </span>
-                                      Will: {renderStat(participant, 'will', participant.will)}
+                                  {participant.type === 'creature' && (
+                                    <div className="d-flex align-items-center mt-1" style={{ gap: '0.5rem' }}>
+                                      DC: {renderStat(participant, 'dc', participant.dc)}
+                                      <span className="ms-2">Spell Attack: {renderStat(participant, 'spellAttackMod', participant.spellAttackMod)}{participant.isWeak ? ' (-4 dmg)' : participant.isElite ? ' (+4 dmg)' : ''}</span>
                                     </div>
-                                  </div>
+                                  )}
                                   {(() => {
                                     const currentResistances = calculateCurrentResistances(participant);
                                     return currentResistances && currentResistances.length > 0 && (
@@ -1526,192 +1565,136 @@ function BattleTab({
                                       </ul>
                                     </div>
                                   )}
-                                  {participant.attacks && Array.isArray(participant.attacks) && participant.attacks.length > 0 && (
-                                    <div>
-                                      {/* Melee Attacks Section */}
-                                      {participant.attacks.some(atk => (atk.attackCategory || atk.attackType) === 'melee') && (
-                                        <div className="mt-2">
-                                          <strong>Melee Attacks:</strong>
-                                          <ul className="mb-0 ps-3">
-                                            {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'melee').map((atk, i) => (
-                                              atk.attackName ? (
-                                                <li key={`${participant.battleId}-melee-${i}`} style={{ listStyleType: 'disc' }}>
-                                                  {atk.attackName} {renderAttackModifiers(participant, atk)}
-                                                  {renderDamage(participant, atk)}
-                                                </li>
-                                              ) : null
-                                            ))}
-                                          </ul>
-                                        </div>
-                                      )}
-                                      {/* Ranged Attacks Section */}
-                                      {participant.attacks.some(atk => (atk.attackCategory || atk.attackType) === 'ranged') && (
-                                        <div className="mt-2">
-                                          <strong>Ranged Attacks:</strong>
-                                          <ul className="mb-0 ps-3">
-                                            {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'ranged').map((atk, i) => (
-                                              atk.attackName ? (
-                                                <li key={`${participant.battleId}-ranged-${i}`} style={{ listStyleType: 'disc' }}>
-                                                  {atk.attackName} {renderAttackModifiers(participant, atk)}
-                                                  {renderDamage(participant, atk)}
-                                                </li>
-                                              ) : null
-                                            ))}
-                                          </ul>
-                                        </div>
-                                      )}
-                                      {/* Spell Attacks Section */}
-                                      {participant.attacks.some(atk => (atk.attackCategory || atk.attackType) === 'spell') && (
-                                        <div className="mt-2">
-                                          <strong>Spells:</strong>
-                                          <ul className="mb-0 ps-3">
-                                            {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'spell').map((atk, i) => (
-                                              atk.attackName ? (
-                                                <li key={`${participant.battleId}-spell-${i}`} style={{ listStyleType: 'disc' }}>
-                                                  <span key={`spell-text-${i}`} className="text-muted"></span> {atk.attackName}
-                                                  <span key={`spell-details-${i}`}>
-                                                    {/* Actions icon */}
-                                                    {(() => {
-                                                      let icon = null;
-                                                      if (atk.actions === '1') icon = action1;
-                                                      else if (atk.actions === '2') icon = action2;
-                                                      else if (atk.actions === '3') icon = action3;
-                                                      else if (atk.actions === 'free') icon = freeAction;
-                                                      if (icon) {
-                                                        return (
-                                                          <img
-                                                            key={`spell-icon-${i}`}
-                                                            src={icon}
-                                                            alt={`${atk.actions} action(s)`}
-                                                            style={{ height: '1.2em', verticalAlign: 'middle', marginLeft: 8, marginRight: 4 }}
-                                                          />
-                                                        );
-                                                      }
-                                                      return null;
-                                                    })()}
-                                                    {atk.targetOrArea === 'target' && atk.targetCount && <span key={`spell-target-${i}`}>, Targets: {atk.targetCount}</span>}
-                                                    {atk.targetOrArea === 'area' && atk.areaType && <span key={`spell-area-${i}`}>, Area: {atk.areaType}</span>}
-                                                    {atk.range && <span key={`spell-range-${i}`}>, Range: {atk.range}</span>}
-                                                    {/* FIXED SPELL ATTACK MODIFIER DISPLAY */}
-                                                    {(() => {
-                                                      if (atk.attackOrSave === 'attack') {
-                                                        let mod = atk.attackModifier;
-                                                        if (mod && typeof mod === 'object') {
-                                                          if ('value' in mod && (typeof mod.value === 'number' || typeof mod.value === 'string')) mod = mod.value;
-                                                          else if ('modifier' in mod && (typeof mod.modifier === 'number' || typeof mod.modifier === 'string')) mod = mod.modifier;
-                                                          else {
-                                                            for (const key in mod) {
-                                                              if (typeof mod[key] === 'number' || typeof mod[key] === 'string') {
-                                                                mod = mod[key];
-                                                                break;
-                                                              }
-                                                            }
-                                                          }
-                                                        }
-                                                        if (mod === undefined || mod === null || mod === '' || (typeof mod !== 'string' && typeof mod !== 'number')) mod = '—';
-                                                        return [
-                                                          <span key={`spell-attack-label-${i}`}>, Attack Modifier: </span>,
-                                                          <span key={`spell-attack-value-${i}`}>{renderStat(participant, 'firstHitModifier', mod, atk)}</span>
-                                                        ];
-                                                      }
-                                                      return null;
-                                                    })()}
-                                                    {atk.attackOrSave === 'save' && <span key={`spell-save-${i}`}>, Save: {atk.saveType || ''} DC {renderStat(participant, 'dc', atk.attackModifier)}</span>}
-                                                    {atk.damage && [
-                                                      <span key={`spell-damage-label-${i}`}>, Damage: </span>,
-                                                      <span key={`spell-damage-value-${i}`}>{renderStat(participant, 'meleeDamage', atk.damage, atk)}</span>
-                                                    ]}
-                                                  </span>
-                                                </li>
-                                              ) : null
-                                            ))}
-                                          </ul>
-                                        </div>
-                                      )}
-                                      {/* Innate Spells Section */}
-                                      {participant.attacks.some(atk => (atk.attackCategory || atk.attackType) === 'innateSpell') && (
-                                        <div className="mt-2">
-                                          <strong>Innate Spells:</strong>
-                                          <ul className="mb-0 ps-3">
-                                            {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'innateSpell').map((atk, i) => {
-                                              const spellKey = `${participant.battleId}-innate-${i}`;
-                                              const isExpanded = expandedSpells[spellKey];
-                                              return (
-                                                <li key={`${participant.battleId}-innateSpell-${i}`} style={{ listStyleType: 'disc' }}>
-                                                  <div 
-                                                    className="d-flex align-items-center" 
-                                                    style={{ cursor: 'pointer' }}
-                                                    onClick={() => setExpandedSpells(prev => ({
-                                                      ...prev,
-                                                      [spellKey]: !prev[spellKey]
-                                                    }))}
-                                                  >
-                                                    <span className="text-muted"></span>
-                                                    {atk.attackName && (
-                                                      <strong style={{ marginLeft: 4 }}>
-                                                        {atk.attackName}
-                                                        {atk.description && (
-                                                          <span className="ms-2" style={{ fontSize: '0.8em', color: '#666' }}>
-                                                            {isExpanded ? '▼' : '▶'}
-                                                          </span>
-                                                        )}
-                                                      </strong>
-                                                    )}
-                                                    {(() => {
-                                                      let icon = null;
-                                                      if (atk.actions === '1') icon = action1;
-                                                      else if (atk.actions === '2') icon = action2;
-                                                      else if (atk.actions === '3') icon = action3;
-                                                      else if (atk.actions === 'free') icon = freeAction;
-                                                      if (icon) {
-                                                        return (
-                                                          <img
-                                                            src={icon}
-                                                            alt={`${atk.actions} action(s)`}
-                                                            style={{ height: '1.2em', verticalAlign: 'middle', marginLeft: 8, marginRight: 4 }}
-                                                          />
-                                                        );
-                                                      }
-                                                      return null;
-                                                    })()}
-                                                    {atk.targetOrArea === 'target' && atk.targetCount && <span>, Targets: {atk.targetCount}</span>}
-                                                    {atk.targetOrArea === 'area' && atk.areaType && <span>, Area: {atk.areaType}</span>}
-                                                    {atk.range && <span>, Range: {atk.range}</span>}
-                                                    {atk.attackOrSave === 'attack' && (
-                                                      <>
-                                                        <span>, Attack Modifier: </span>
-                                                        {renderStat(participant, 'firstHitModifier', atk.attackModifier, atk)}
-                                                      </>
-                                                    )}
-                                                    {atk.attackOrSave === 'save' && <span>, Save: {atk.saveType || ''} DC {renderStat(participant, 'dc', atk.attackModifier)}</span>}
-                                                    {atk.damage && [
-                                                      <span>, Damage: </span>,
-                                                      <span>{renderStat(participant, 'meleeDamage', atk.damage, atk)}</span>
-                                                    ]}
-                                                  </div>
-                                                  {isExpanded && atk.description && (
-                                                    <div 
-                                                      className="mt-1 mb-1" 
-                                                      style={{ 
-                                                        marginLeft: 24, 
-                                                        padding: '8px',
-                                                        backgroundColor: '#f8f9fa',
-                                                        borderRadius: '4px',
-                                                        border: '1px solid #dee2e6'
-                                                      }}
-                                                    >
-                                                      {renderSpellDescription(atk.description)}
+                                  {participant.type === 'creature' && (
+                                    <>
+                                      {((participant.attacks && Array.isArray(participant.attacks) && participant.attacks.length > 0) || (participant.actions && participant.actions.length > 0)) && (
+                                        <div>
+                                          <div
+                                            className="mt-2 mb-2"
+                                            style={{ 
+                                              cursor: 'pointer',
+                                              fontSize: '1.1em',
+                                              fontWeight: 'bold',
+                                              color: '#0d6efd',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '0.5rem'
+                                            }}
+                                            onClick={() => setExpandedAttacks(prev => ({
+                                              ...prev,
+                                              [participant.battleId]: !prev[participant.battleId]
+                                            }))}
+                                          >
+                                            <span>Attacks & Actions</span>
+                                            <span style={{ fontSize: '0.8em' }}>{expandedAttacks[participant.battleId] ? '▼' : '▶'}</span>
+                                          </div>
+                                          {expandedAttacks[participant.battleId] && (
+                                            <>
+                                              {participant.attacks && Array.isArray(participant.attacks) && participant.attacks.length > 0 && (
+                                                <>
+                                                  {/* Melee Attacks Section */}
+                                                  {participant.attacks.some(atk => (atk.attackCategory || atk.attackType) === 'melee') && (
+                                                    <div className="mt-2">
+                                                      <strong>Melee Attacks:</strong>
+                                                      <ul className="mb-0 ps-3">
+                                                        {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'melee').map((atk, i) => (
+                                                          atk.attackName ? (
+                                                            <li key={`${participant.battleId}-melee-${i}`} style={{ listStyleType: 'disc' }}>
+                                                              {atk.attackName} {renderAttackModifiers(participant, atk)}
+                                                              {renderDamage(participant, atk)}
+                                                            </li>
+                                                          ) : null
+                                                        ))}
+                                                      </ul>
                                                     </div>
                                                   )}
-                                                </li>
-                                              );
-                                            })}
-                                          </ul>
+                                                  {/* Ranged Attacks Section */}
+                                                  {participant.attacks.some(atk => (atk.attackCategory || atk.attackType) === 'ranged') && (
+                                                    <div className="mt-2">
+                                                      <strong>Ranged Attacks:</strong>
+                                                      <ul className="mb-0 ps-3">
+                                                        {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'ranged').map((atk, i) => (
+                                                          atk.attackName ? (
+                                                            <li key={`${participant.battleId}-ranged-${i}`} style={{ listStyleType: 'disc' }}>
+                                                              {atk.attackName} {renderAttackModifiers(participant, atk)}
+                                                              {renderDamage(participant, atk)}
+                                                            </li>
+                                                          ) : null
+                                                        ))}
+                                                      </ul>
+                                                    </div>
+                                                  )}
+                                                  {/* Spell Attacks Section */}
+                                                  {participant.attacks.some(atk => (atk.attackCategory || atk.attackType) === 'spell') && (
+                                                    <div className="mt-2">
+                                                      <strong>Spell Attacks:</strong>
+                                                      <ul className="mb-0 ps-3">
+                                                        {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'spell').map((atk, i) => {
+                                                          const spellKey = `${participant.battleId}-spell-${i}`;
+                                                          const isExpanded = expandedSpells[spellKey];
+                                                          let icon = null;
+                                                          if (atk.actions === '1') icon = action1;
+                                                          else if (atk.actions === '2') icon = action2;
+                                                          else if (atk.actions === '3') icon = action3;
+                                                          else if (atk.actions === 'free') icon = freeAction;
+                                                          return atk.attackName ? (
+                                                            <li key={spellKey} style={{ listStyleType: 'circle', cursor: atk.description ? 'pointer' : 'default' }} onClick={() => atk.description && setExpandedSpells(prev => ({ ...prev, [spellKey]: !prev[spellKey] }))}>
+                                                              <span className="text-muted"></span> <strong style={{ marginLeft: 4 }}>{atk.attackName}</strong>
+                                                              {icon && (
+                                                                <img
+                                                                  src={icon}
+                                                                  alt={`${atk.actions} action(s)`}
+                                                                  style={{ height: '1.2em', verticalAlign: 'middle', marginLeft: 8, marginRight: 4 }}
+                                                                />
+                                                              )}
+                                                              {atk.range && <span>, Range: {atk.range}</span>}
+                                                              {atk.targets && <span>, Targets: {atk.targets}</span>}
+                                                              {atk.duration && <span>, Duration: {atk.duration}</span>}
+                                                              {atk.description && (
+                                                                <span className="ms-2" style={{ fontSize: '0.8em', color: '#666' }}>{isExpanded ? '▼' : '▶'}</span>
+                                                              )}
+                                                              {isExpanded && atk.description && (
+                                                                <div
+                                                                  className="mt-1 mb-1"
+                                                                  style={{ marginLeft: 24, padding: '8px', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #dee2e6' }}
+                                                                  onClick={e => {
+                                                                    const target = e.target;
+                                                                    if (target.classList && target.classList.contains('condition-link')) {
+                                                                      e.preventDefault();
+                                                                      e.stopPropagation();
+                                                                      const condName = target.getAttribute('data-condition');
+                                                                      const found = conditionList.find(c => c.name === condName);
+                                                                      if (found) {
+                                                                        setConditionModalData(found);
+                                                                        setShowConditionModal(true);
+                                                                      }
+                                                                    }
+                                                                  }}
+                                                                >
+                                                                  {renderSpellDescription(atk.description)}
+                                                                </div>
+                                                              )}
+                                                            </li>
+                                                          ) : null;
+                                                        })}
+                                                      </ul>
+                                                    </div>
+                                                  )}
+                                                  {/* Regular Spells Section */}
+                                                  {renderRegularSpellsListLikeAttackSpells(participant.attacks, expandedSpells, setExpandedSpells, participant)}
+                                                </>
+                                              )}
+                                              {/* Actions Section */}
+                                              {participant.actions && participant.actions.length > 0 && (
+                                                <div className="mt-2">
+                                                  {renderCreatureActions(participant)}
+                                                </div>
+                                              )}
+                                            </>
+                                          )}
                                         </div>
                                       )}
-                                      {/* Regular Spells Section */}
-                                      {renderRegularSpellsListLikeAttackSpells(participant.attacks || [], expandedSpells, setExpandedSpells, participant)}
-                                    </div>
+                                    </>
                                   )}
                                 </>
                               ) : (
@@ -1780,14 +1763,23 @@ function BattleTab({
                                       <span className="ms-2">Level: {renderStat(participant, 'level', participant.level)}</span>
                                     )}
                                   </div>
+                                  {participant.type === 'creature' && (
+                                    <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
+                                      Fortitude: {renderStat(participant, 'fortitude', participant.fortitude)}
+                                      <span className="ms-2">
+                                        Reflex: {renderStat(participant, 'reflex', participant.reflex)}
+                                      </span>
+                                      Will: {renderStat(participant, 'will', participant.will)}
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
-                            {participant.type === 'creature' && participant.actions && participant.actions.length > 0 && (
+                            {/* {participant.type === 'creature' && participant.actions && participant.actions.length > 0 && (
                               <div className="mt-2">
                                 {renderCreatureActions(participant)}
                               </div>
-                            )}
+                            )} */}
                             {participant.conditions && Object.entries(participant.conditions).length > 0 && (
                               <div className="mt-2">
                                 <strong>Conditions:</strong>
@@ -1983,17 +1975,21 @@ function BattleTab({
                         </div>
                       </div>
                       <div className="row">
-                        <div className="col-md-4 mb-3">
+                        <div className="col-md-3 mb-3">
                           <label className="form-label">HP</label>
                           <input type="number" className="form-control" value={creatureToEdit.maxHp} onChange={e => handleEditCreatureChange('maxHp', e.target.value)} />
                         </div>
-                        <div className="col-md-4 mb-3">
+                        <div className="col-md-3 mb-3">
                           <label className="form-label">AC</label>
                           <input type="number" className="form-control" value={creatureToEdit.ac} onChange={e => handleEditCreatureChange('ac', e.target.value)} />
                         </div>
-                        <div className="col-md-4 mb-3">
+                        <div className="col-md-3 mb-3">
                           <label className="form-label">DC</label>
                           <input type="number" className="form-control" value={creatureToEdit.dc} onChange={e => handleEditCreatureChange('dc', e.target.value)} />
+                        </div>
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">Spell Attack Mod</label>
+                          <input type="number" className="form-control" value={creatureToEdit.spellAttackMod} onChange={e => handleEditCreatureChange('spellAttackMod', e.target.value)} />
                         </div>
                       </div>
                       <div className="row">
