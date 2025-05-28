@@ -5,13 +5,10 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import InitiativeDialog from './InitiativeDialog';
 import DeleteConfirmationDialog from './DeleteConfirmationDialog';
 import ConditionsMenu, { CONDITIONS } from './ConditionsMenu';
-import action1 from '../assets/action-1.png';
-import action2 from '../assets/action-2.png';
-import action3 from '../assets/action-3.png';
-import freeAction from '../assets/action-free.png';
-import reaction from '../assets/action-reaction.png';
 import CreatureAttackForm from './CreatureAttackForm';
 import CreatureActionForm from './CreatureActionForm';
+import CreatureCard from './CreatureCard';
+import PlayerCard from './PlayerCard';
 import { calculateCurrentResistances } from '../utils/creatureConversion';
 import quickRefData from '../data/quickRef.json';
 
@@ -225,7 +222,7 @@ function BattleTab({
     setTempHpInputValues(prev => ({ ...prev, [battleId]: value }));
   };
 
-  const handleHpDeduct = (participant) => {
+  const handleHpSubtract = (participant) => {
     const value = Number(hpInputValues[participant.battleId]);
     if (!isNaN(value) && value !== 0) {
       if (onUpdateParticipantHP) {
@@ -242,7 +239,7 @@ function BattleTab({
     }
   };
 
-  const handleHpHeal = (participant) => {
+  const handleHpAdd = (participant) => {
     const value = Number(hpInputValues[participant.battleId]);
     if (!isNaN(value) && value !== 0) {
       if (onUpdateParticipantHP) {
@@ -756,118 +753,6 @@ function BattleTab({
     return () => { window.updateBattleParticipantInitiative = undefined; };
   }, []);
 
-  // Helper function to check if a stat is affected by conditions (optionally for a specific attack)
-  const isStatAffectedByConditions = (participant, stat, attack = null) => {
-    if (!participant.conditions) return false;
-    return Object.entries(participant.conditions).some(([conditionId, data]) => {
-      const condition = CONDITIONS[conditionId.toUpperCase().replace('-', '_')] ||
-        Object.values(CONDITIONS).find(c => c.id === conditionId);
-      if (!condition) return false;
-      // For attack modifiers, check for per-type keys
-      if ((stat === 'firstHitModifier' || stat === 'secondHitModifier' || stat === 'thirdHitModifier') && attack) {
-        const type = (attack.attackCategory || attack.attackType || '').toLowerCase();
-        let effectKey = '';
-        if (type === 'melee') effectKey = 'melee' + stat.charAt(0).toUpperCase() + stat.slice(1);
-        else if (type === 'ranged') effectKey = 'ranged' + stat.charAt(0).toUpperCase() + stat.slice(1);
-        else if (type === 'spell') effectKey = 'spell' + stat.charAt(0).toUpperCase() + stat.slice(1);
-        if (effectKey && effectKey in condition.effects) return true;
-      }
-      // For damage, only highlight if the condition affects the correct type
-      if (stat === 'meleeDamage' && attack) {
-        const type = (attack.attackCategory || attack.attackType || '').toLowerCase();
-        if (type === 'melee' && 'meleeDamage' in condition.effects) return true;
-        if (type === 'ranged' && 'rangedDamage' in condition.effects) return true;
-        if (type === 'spell' && 'spellDamage' in condition.effects) return true;
-      }
-      // Check if the condition affects this stat (for non-attack stats)
-      if (stat === 'ac' && 'ac' in condition.effects) return true;
-      if (stat === 'dc' && 'dc' in condition.effects) return true;
-      if (stat === 'perception' && 'perception' in condition.effects) return true;
-      if (stat === 'fortitude' && 'fortitude' in condition.effects) return true;
-      if (stat === 'reflex' && 'reflex' in condition.effects) return true;
-      if (stat === 'will' && 'will' in condition.effects) return true;
-      return false;
-    });
-  };
-
-  // Helper function to render a stat with conditional styling (optionally for a specific attack)
-  const renderStat = (participant, stat, value, attack = null) => {
-    const isAffected = isStatAffectedByConditions(participant, stat, attack);
-    const isModified = participant.isWeak || participant.isElite;
-    
-    if (value === null || value === undefined || value === '' || (typeof value !== 'string' && typeof value !== 'number')) {
-      return <span>—</span>;
-    }
-    
-    let style = {};
-    if (isAffected) {
-      style.color = 'red';
-    } else if (isModified) {
-      style.color = '#ff6be4'; // Purple color for modified stats
-    }
-    
-    return (
-      <span style={style}>
-        {value}
-      </span>
-    );
-  };
-
-  // Helper function to render attack modifiers
-  const renderAttackModifiers = (participant, attack) => {
-    const modifiers = [
-      attack.firstHitModifier,
-      attack.secondHitModifier,
-      attack.thirdHitModifier
-    ].filter(mod => mod !== null && mod !== undefined && mod !== '');
-
-    if (modifiers.length === 0) return null;
-
-    return modifiers.map((mod, index) => (
-      <React.Fragment key={index}>
-        {renderStat(participant, ['firstHitModifier', 'secondHitModifier', 'thirdHitModifier'][index], mod, attack)}
-        {index < modifiers.length - 1 ? '/' : ''}
-      </React.Fragment>
-    ));
-  };
-
-  // Helper function to render damage
-  const renderDamage = (participant, attack) => {
-    if (!attack.damage) return null;
-    return (
-      <span>
-        {' ('}
-        {renderStat(participant, 'meleeDamage', attack.damage, attack)}
-        {')'}
-      </span>
-    );
-  };
-
-  // Helper to safely get a numeric/string attack modifier for spells
-  const getSpellAttackModifier = atk => {
-    let result = '—';
-    if (typeof atk.firstHitModifier === 'number' || typeof atk.firstHitModifier === 'string') {
-      result = atk.firstHitModifier;
-    } else if (typeof atk.attackModifier === 'number' || typeof atk.attackModifier === 'string') {
-      result = atk.attackModifier;
-    } else if (atk.attackModifier && typeof atk.attackModifier === 'object') {
-      if ('value' in atk.attackModifier && (typeof atk.attackModifier.value === 'number' || typeof atk.attackModifier.value === 'string')) {
-        result = atk.attackModifier.value;
-      } else if ('modifier' in atk.attackModifier && (typeof atk.attackModifier.modifier === 'number' || typeof atk.attackModifier.modifier === 'string')) {
-        result = atk.attackModifier.modifier;
-      } else {
-        for (const key in atk.attackModifier) {
-          if (typeof atk.attackModifier[key] === 'number' || typeof atk.attackModifier[key] === 'string') {
-            result = atk.attackModifier[key];
-            break;
-          }
-        }
-      }
-    }
-    console.log('Spell attack modifier for', atk.attackName, ':', result, 'typeof:', typeof result);
-    return result;
-  };
-
   // Add function to handle persistent damage application
   const handlePersistentDamage = (participant) => {
     if (!participant.conditions?.persistentDamage) return;
@@ -974,69 +859,6 @@ function BattleTab({
       }
     }
   }, [currentRound, isBattleStarted, currentTurn]);
-
-  // Add this helper function inside BattleTab
-  function renderRegularSpellsListLikeAttackSpells(attacks, expandedSpells, setExpandedSpells, participant) {
-    const spells = attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'regularSpell');
-    if (spells.length === 0) return null;
-    return (
-      <div className="mt-2">
-        <strong>Regular Spells:</strong>
-        <ul className="mb-0 ps-3">
-          {spells.map((atk, i) => {
-            const spellKey = `${participant.battleId}-regularSpell-${i}`;
-            const isExpanded = expandedSpells[spellKey];
-            let icon = null;
-            if (atk.actions === '1') icon = action1;
-            else if (atk.actions === '2') icon = action2;
-            else if (atk.actions === '3') icon = action3;
-            else if (atk.actions === 'free') icon = freeAction;
-            return (
-              atk.attackName ? (
-                <li key={spellKey} style={{ listStyleType: 'circle', cursor: atk.description ? 'pointer' : 'default' }} onClick={() => atk.description && setExpandedSpells(prev => ({ ...prev, [spellKey]: !prev[spellKey] }))}>
-                  <span className="text-muted"></span> <strong style={{ marginLeft: 4 }}>{atk.attackName}</strong>
-                  {icon && (
-                    <img
-                      src={icon}
-                      alt={`${atk.actions} action(s)`}
-                      style={{ height: '1.2em', verticalAlign: 'middle', marginLeft: 8, marginRight: 4 }}
-                    />
-                  )}
-                  {atk.range && <span>, Range: {atk.range}</span>}
-                  {atk.targets && <span>, Targets: {atk.targets}</span>}
-                  {atk.duration && <span>, Duration: {atk.duration}</span>}
-                  {atk.description && (
-                    <span className="ms-2" style={{ fontSize: '0.8em', color: '#666' }}>{isExpanded ? '▼' : '▶'}</span>
-                  )}
-                  {isExpanded && atk.description && (
-                    <div
-                      className="mt-1 mb-1"
-                      style={{ marginLeft: 24, padding: '8px', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #dee2e6' }}
-                      onClick={e => {
-                        const target = e.target;
-                        if (target.classList && target.classList.contains('condition-link')) {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          const condName = target.getAttribute('data-condition');
-                          const found = conditionList.find(c => c.name === condName);
-                          if (found) {
-                            setConditionModalData(found);
-                            setShowConditionModal(true);
-                          }
-                        }
-                      }}
-                    >
-                      {renderSpellDescription(atk.description)}
-                    </div>
-                  )}
-                </li>
-              ) : null
-            );
-          })}
-        </ul>
-      </div>
-    );
-  }
 
   // Move the effect here, inside BattleTab
   useEffect(() => {
@@ -1239,67 +1061,6 @@ function BattleTab({
     onUpdateBattleParticipant(updatedCreature);
   };
 
-  const renderCreatureActions = (creature) => {
-    if (!creature.actions || creature.actions.length === 0) return null;
-
-    return (
-      <div className="mt-2">
-        <strong >Actions:</strong>
-        <ul className="mb-0 ps-3">
-          {creature.actions.map((action, index) => {
-            const actionKey = `${creature.battleId}-action-${index}`;
-            const isExpanded = expandedSpells[actionKey];
-            let icon = null;
-            if (action.actionType === 'action') {
-              if (action.actions === '1') icon = action1;
-              else if (action.actions === '2') icon = action2;
-              else if (action.actions === '3') icon = action3;
-            } else if (action.actionType === 'reaction') {
-              icon = reaction;
-            }
-
-            return (
-              <li key={actionKey} style={{ listStyleType: 'circle', cursor: action.description ? 'pointer' : 'default' }} onClick={() => action.description && setExpandedSpells(prev => ({ ...prev, [actionKey]: !prev[actionKey] }))}>
-                <span className="text-muted"></span> <strong style={{ marginLeft: 4 }}>{action.name}</strong>
-                {icon && (
-                  <img
-                    src={icon}
-                    alt={`${action.actions} action(s)`}
-                    style={{ height: '1.2em', verticalAlign: 'middle', marginLeft: 8, marginRight: 4 }}
-                  />
-                )}
-                {action.description && (
-                  <span className="ms-2" style={{ fontSize: '0.8em', color: '#666' }}>{isExpanded ? '▼' : '▶'}</span>
-                )}
-                {isExpanded && action.description && (
-                  <div
-                    className="mt-1 mb-1"
-                    style={{ marginLeft: 24, padding: '8px', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #dee2e6' }}
-                    onClick={e => {
-                      const target = e.target;
-                      if (target.classList && target.classList.contains('condition-link')) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const condName = target.getAttribute('data-condition');
-                        const found = conditionList.find(c => c.name === condName);
-                        if (found) {
-                          setConditionModalData(found);
-                          setShowConditionModal(true);
-                        }
-                      }
-                    }}
-                  >
-                    {renderSpellDescription(action.description)}
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-    );
-  };
-
   const handleEliteToggle = (creature) => {
     if (creature.isElite) {
       const updatedCreature = { ...creature, isElite: false };
@@ -1450,336 +1211,39 @@ function BattleTab({
                             </div>
                             <div className="small text-muted mt-1">
                               {participant.type === 'creature' ? (
-                                <>
-                                  <div className="mb-1">
-                                    HP: {participant.hp} / {participant.maxHp !== undefined && participant.maxHp !== '' ? participant.maxHp : participant.hp}
-                                    {participant.tempHp > 0 && (
-                                      <span className="text-info ms-2">(+{participant.tempHp} temp)</span>
-                                    )}
-                                  </div>
-                                  <div className="d-flex flex-column ms-2 mb-1" style={{ gap: '0.5rem' }}>
-                                    <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
-                                      <input
-                                        type="number"
-                                        className="form-control d-inline-block"
-                                        style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
-                                        value={hpInputValues[participant.battleId] || ''}
-                                        onChange={e => handleHpInputChange(participant.battleId, e.target.value)}
-                                        placeholder="HP"
-                                      />
-                                      <Button
-                                        variant="outline-success"
-                                        size="sm"
-                                        className="ms-1"
-                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                                        onClick={() => handleHpHeal(participant)}
-                                        disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
-                                      >
-                                        +
-                                      </Button>
-                                      <Button
-                                        variant="outline-danger"
-                                        size="sm"
-                                        className="ms-1"
-                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                                        onClick={() => handleHpDeduct(participant)}
-                                        disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
-                                      >
-                                        -
-                                      </Button>
-                                    </div>
-                                    <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
-                                      <input
-                                        type="number"
-                                        className="form-control d-inline-block"
-                                        style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
-                                        value={tempHpInputValues[participant.battleId] || ''}
-                                        onChange={e => handleTempHpInputChange(participant.battleId, e.target.value)}
-                                        placeholder="Temp"
-                                      />
-                                      <Button
-                                        variant="outline-info"
-                                        size="sm"
-                                        className="ms-1"
-                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                                        onClick={() => handleTempHpAdd(participant)}
-                                        disabled={!tempHpInputValues[participant.battleId] || isNaN(Number(tempHpInputValues[participant.battleId]))}
-                                      >
-                                        +
-                                      </Button>
-                                    </div>
-                                  </div>
-                                  <div>
-                                    AC: {renderStat(participant, 'ac', participant.ac)}
-                                    <span className="ms-2">
-                                      Level: {renderStat(participant, 'level', participant.level)}
-                                    </span>
-                                  </div>
-                                  {participant.type === 'creature' && (
-                                    <div className="d-flex align-items-center mt-1" style={{ gap: '0.5rem' }}>
-                                      DC: {renderStat(participant, 'dc', participant.dc)}
-                                      <span className="ms-2">Spell Attack: {renderStat(participant, 'spellAttackMod', participant.spellAttackMod)}{participant.isWeak ? ' (-4 dmg)' : participant.isElite ? ' (+4 dmg)' : ''}</span>
-                                    </div>
-                                  )}
-                                  {(() => {
-                                    const currentResistances = calculateCurrentResistances(participant);
-                                    return currentResistances && currentResistances.length > 0 && (
-                                      <div className="mt-2">
-                                        <strong>Resistances:</strong>
-                                        <ul className={currentResistances.length > 2 ? "mb-0 ps-3 d-flex flex-wrap gap-2 list-unstyled flex-row" : "mb-0 ps-3"}>
-                                          {currentResistances.map((resistance, i) => (
-                                            <li key={`${participant.battleId}-resistance-${i}`} style={{ listStyleType: currentResistances.length > 2 ? 'none' : 'disc' }}>
-                                              {resistance.type} {resistance.value}
-                                              {currentResistances.length > 2 && i < currentResistances.length - 1 ? ',' : ''}
-                                            </li>
-                                          ))}
-                                        </ul>
-                                      </div>
-                                    );
-                                  })()}
-                                  {participant.immunities && participant.immunities.length > 0 && (
-                                    <div className="mt-2">
-                                      <strong>Immunities:</strong>
-                                      <ul className={participant.immunities.length > 2 ? "mb-0 ps-3 d-flex flex-wrap gap-2 list-unstyled flex-row" : "mb-0 ps-3"}>
-                                        {participant.immunities.map((immunity, i) => (
-                                          <li key={`${participant.battleId}-immunity-${i}`} style={{ listStyleType: participant.immunities.length > 2 ? 'none' : 'disc' }}>
-                                            {typeof immunity === 'string' ? immunity : immunity.type}
-                                            {typeof immunity === 'object' && immunity.exceptions && immunity.exceptions.length > 0 && 
-                                              ` (except ${immunity.exceptions.join(', ')})`}
-                                            {participant.immunities.length > 2 && i < participant.immunities.length - 1 ? ',' : ''}
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                  )}
-                                  {participant.weaknesses && participant.weaknesses.length > 0 && (
-                                    <div className="mt-2">
-                                      <strong>Weaknesses:</strong>
-                                      <ul className={participant.weaknesses.length > 2 ? "mb-0 ps-3 d-flex flex-wrap gap-2 list-unstyled flex-row" : "mb-0 ps-3"}>
-                                        {participant.weaknesses.map((weakness, i) => (
-                                          <li key={`${participant.battleId}-weakness-${i}`} style={{ listStyleType: participant.weaknesses.length > 2 ? 'none' : 'disc' }}>
-                                            {weakness.type} {weakness.value}
-                                            {participant.weaknesses.length > 2 && i < participant.weaknesses.length - 1 ? ',' : ''}
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                  )}
-                                  {participant.type === 'creature' && (
-                                    <>
-                                      {((participant.attacks && Array.isArray(participant.attacks) && participant.attacks.length > 0) || (participant.actions && participant.actions.length > 0)) && (
-                                        <div>
-                                          <div
-                                            className="mt-2 mb-2"
-                                            style={{ 
-                                              cursor: 'pointer',
-                                              fontSize: '1.1em',
-                                              fontWeight: 'bold',
-                                              color: '#0d6efd',
-                                              display: 'flex',
-                                              alignItems: 'center',
-                                              gap: '0.5rem'
-                                            }}
-                                            onClick={() => setExpandedAttacks(prev => ({
-                                              ...prev,
-                                              [participant.battleId]: !prev[participant.battleId]
-                                            }))}
-                                          >
-                                            <span>Attacks & Actions</span>
-                                            <span style={{ fontSize: '0.8em' }}>{expandedAttacks[participant.battleId] ? '▼' : '▶'}</span>
-                                          </div>
-                                          {expandedAttacks[participant.battleId] && (
-                                            <>
-                                              {participant.attacks && Array.isArray(participant.attacks) && participant.attacks.length > 0 && (
-                                                <>
-                                                  {/* Melee Attacks Section */}
-                                                  {participant.attacks.some(atk => (atk.attackCategory || atk.attackType) === 'melee') && (
-                                                    <div className="mt-2">
-                                                      <strong>Melee Attacks:</strong>
-                                                      <ul className="mb-0 ps-3">
-                                                        {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'melee').map((atk, i) => (
-                                                          atk.attackName ? (
-                                                            <li key={`${participant.battleId}-melee-${i}`} style={{ listStyleType: 'disc' }}>
-                                                              {atk.attackName} {renderAttackModifiers(participant, atk)}
-                                                              {renderDamage(participant, atk)}
-                                                            </li>
-                                                          ) : null
-                                                        ))}
-                                                      </ul>
-                                                    </div>
-                                                  )}
-                                                  {/* Ranged Attacks Section */}
-                                                  {participant.attacks.some(atk => (atk.attackCategory || atk.attackType) === 'ranged') && (
-                                                    <div className="mt-2">
-                                                      <strong>Ranged Attacks:</strong>
-                                                      <ul className="mb-0 ps-3">
-                                                        {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'ranged').map((atk, i) => (
-                                                          atk.attackName ? (
-                                                            <li key={`${participant.battleId}-ranged-${i}`} style={{ listStyleType: 'disc' }}>
-                                                              {atk.attackName} {renderAttackModifiers(participant, atk)}
-                                                              {renderDamage(participant, atk)}
-                                                            </li>
-                                                          ) : null
-                                                        ))}
-                                                      </ul>
-                                                    </div>
-                                                  )}
-                                                  {/* Spell Attacks Section */}
-                                                  {participant.attacks.some(atk => (atk.attackCategory || atk.attackType) === 'spell') && (
-                                                    <div className="mt-2">
-                                                      <strong>Spell Attacks:</strong>
-                                                      <ul className="mb-0 ps-3">
-                                                        {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'spell').map((atk, i) => {
-                                                          const spellKey = `${participant.battleId}-spell-${i}`;
-                                                          const isExpanded = expandedSpells[spellKey];
-                                                          let icon = null;
-                                                          if (atk.actions === '1') icon = action1;
-                                                          else if (atk.actions === '2') icon = action2;
-                                                          else if (atk.actions === '3') icon = action3;
-                                                          else if (atk.actions === 'free') icon = freeAction;
-                                                          return atk.attackName ? (
-                                                            <li key={spellKey} style={{ listStyleType: 'circle', cursor: atk.description ? 'pointer' : 'default' }} onClick={() => atk.description && setExpandedSpells(prev => ({ ...prev, [spellKey]: !prev[spellKey] }))}>
-                                                              <span className="text-muted"></span> <strong style={{ marginLeft: 4 }}>{atk.attackName}</strong>
-                                                              {icon && (
-                                                                <img
-                                                                  src={icon}
-                                                                  alt={`${atk.actions} action(s)`}
-                                                                  style={{ height: '1.2em', verticalAlign: 'middle', marginLeft: 8, marginRight: 4 }}
-                                                                />
-                                                              )}
-                                                              {atk.range && <span>, Range: {atk.range}</span>}
-                                                              {atk.targets && <span>, Targets: {atk.targets}</span>}
-                                                              {atk.duration && <span>, Duration: {atk.duration}</span>}
-                                                              {atk.description && (
-                                                                <span className="ms-2" style={{ fontSize: '0.8em', color: '#666' }}>{isExpanded ? '▼' : '▶'}</span>
-                                                              )}
-                                                              {isExpanded && atk.description && (
-                                                                <div
-                                                                  className="mt-1 mb-1"
-                                                                  style={{ marginLeft: 24, padding: '8px', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #dee2e6' }}
-                                                                  onClick={e => {
-                                                                    const target = e.target;
-                                                                    if (target.classList && target.classList.contains('condition-link')) {
-                                                                      e.preventDefault();
-                                                                      e.stopPropagation();
-                                                                      const condName = target.getAttribute('data-condition');
-                                                                      const found = conditionList.find(c => c.name === condName);
-                                                                      if (found) {
-                                                                        setConditionModalData(found);
-                                                                        setShowConditionModal(true);
-                                                                      }
-                                                                    }
-                                                                  }}
-                                                                >
-                                                                  {renderSpellDescription(atk.description)}
-                                                                </div>
-                                                              )}
-                                                            </li>
-                                                          ) : null;
-                                                        })}
-                                                      </ul>
-                                                    </div>
-                                                  )}
-                                                  {/* Regular Spells Section */}
-                                                  {renderRegularSpellsListLikeAttackSpells(participant.attacks, expandedSpells, setExpandedSpells, participant)}
-                                                </>
-                                              )}
-                                              {/* Actions Section */}
-                                              {participant.actions && participant.actions.length > 0 && (
-                                                <div className="mt-2">
-                                                  {renderCreatureActions(participant)}
-                                                </div>
-                                              )}
-                                            </>
-                                          )}
-                                        </div>
-                                      )}
-                                    </>
-                                  )}
-                                </>
+                                <CreatureCard
+                                  participant={participant}
+                                  currentTurn={currentTurn}
+                                  expandedAttacks={expandedAttacks}
+                                  setExpandedAttacks={setExpandedAttacks}
+                                  expandedSpells={expandedSpells}
+                                  setExpandedSpells={setExpandedSpells}
+                                  onDeleteClick={handleDeleteClick}
+                                  onWeakAdjustment={handleWeakAdjustment}
+                                  onEliteAdjustment={handleEliteAdjustment}
+                                  onEditCreatureClick={handleEditCreatureClick}
+                                  hpInputValues={hpInputValues}
+                                  tempHpInputValues={tempHpInputValues}
+                                  onHpInputChange={handleHpInputChange}
+                                  onTempHpInputChange={handleTempHpInputChange}
+                                  onHpAdd={handleHpAdd}
+                                  onHpSubtract={handleHpSubtract}
+                                  onTempHpAdd={handleTempHpAdd}
+                                />
                               ) : (
-                                <div className="d-flex flex-column align-items-start ms-2 mb-1">
-                                  <div className="mb-1">
-                                    HP: {participant.hp} / {participant.maxHp !== undefined && participant.maxHp !== '' ? participant.maxHp : participant.hp}
-                                    {participant.tempHp > 0 && (
-                                      <span className="text-info ms-2">(+{participant.tempHp} temp)</span>
-                                    )}
-                                  </div>
-                                  <div className="d-flex flex-column ms-2 mb-1" style={{ gap: '0.5rem' }}>
-                                    <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
-                                      <input
-                                        type="number"
-                                        className="form-control d-inline-block"
-                                        style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
-                                        value={hpInputValues[participant.battleId] || ''}
-                                        onChange={e => handleHpInputChange(participant.battleId, e.target.value)}
-                                        placeholder="HP"
-                                      />
-                                      <Button
-                                        variant="outline-success"
-                                        size="sm"
-                                        className="ms-1"
-                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                                        onClick={() => handleHpHeal(participant)}
-                                        disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
-                                      >
-                                        +
-                                      </Button>
-                                      <Button
-                                        variant="outline-danger"
-                                        size="sm"
-                                        className="ms-1"
-                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                                        onClick={() => handleHpDeduct(participant)}
-                                        disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
-                                      >
-                                        -
-                                      </Button>
-                                    </div>
-                                    <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
-                                      <input
-                                        type="number"
-                                        className="form-control d-inline-block"
-                                        style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
-                                        value={tempHpInputValues[participant.battleId] || ''}
-                                        onChange={e => handleTempHpInputChange(participant.battleId, e.target.value)}
-                                        placeholder="Temp"
-                                      />
-                                      <Button
-                                        variant="outline-info"
-                                        size="sm"
-                                        className="ms-1"
-                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                                        onClick={() => handleTempHpAdd(participant)}
-                                        disabled={!tempHpInputValues[participant.battleId] || isNaN(Number(tempHpInputValues[participant.battleId]))}
-                                      >
-                                        +
-                                      </Button>
-                                    </div>
-                                  </div>
-                                  <div className="mt-1">
-                                    <span className="ms-2">AC: {renderStat(participant, 'ac', participant.ac || 0)}</span>
-                                    {participant.level !== undefined && participant.level !== null && (
-                                      <span className="ms-2">Level: {renderStat(participant, 'level', participant.level)}</span>
-                                    )}
-                                  </div>
-                                  {participant.type === 'creature' && (
-                                    <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
-                                      Fortitude: {renderStat(participant, 'fortitude', participant.fortitude)}
-                                      <span className="ms-2">
-                                        Reflex: {renderStat(participant, 'reflex', participant.reflex)}
-                                      </span>
-                                      Will: {renderStat(participant, 'will', participant.will)}
-                                    </div>
-                                  )}
-                                </div>
+                                <PlayerCard
+                                  participant={participant}
+                                  currentTurn={currentTurn}
+                                  hpInputValues={hpInputValues}
+                                  tempHpInputValues={tempHpInputValues}
+                                  onHpInputChange={handleHpInputChange}
+                                  onTempHpInputChange={handleTempHpInputChange}
+                                  onHpAdd={handleHpAdd}
+                                  onHpSubtract={handleHpSubtract}
+                                  onTempHpAdd={handleTempHpAdd}
+                                />
                               )}
                             </div>
-                            {/* {participant.type === 'creature' && participant.actions && participant.actions.length > 0 && (
-                              <div className="mt-2">
-                                {renderCreatureActions(participant)}
-                              </div>
-                            )} */}
                             {participant.conditions && Object.entries(participant.conditions).length > 0 && (
                               <div className="mt-2">
                                 <strong>Conditions:</strong>
