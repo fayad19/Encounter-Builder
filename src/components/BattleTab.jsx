@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Container, Row, Col, Card, Button, ListGroup, ListGroupItem, Badge, Modal } from 'react-bootstrap';
 import { ArrowRight, Trash, Pencil, Plus, X } from 'react-bootstrap-icons';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
@@ -11,6 +11,7 @@ import CreatureCard from './CreatureCard';
 import PlayerCard from './PlayerCard';
 import { calculateCurrentResistances } from '../utils/creatureConversion';
 import quickRefData from '../data/quickRef.json';
+import CreatureSkillsForm from './CreatureSkillsForm';
 
 // Add PersistentDamageDialog component
 function PersistentDamageDialog({ show, onHide, onConfirm, onCancel, damageType, damageValue }) {
@@ -94,7 +95,9 @@ function BattleTab({
   const [endBattleDialogOpen, setEndBattleDialogOpen] = useState(false);
   const [removeAllDialogOpen, setRemoveAllDialogOpen] = useState(false);
   const [editCreatureDialogOpen, setEditCreatureDialogOpen] = useState(false);
+  const [editPlayerDialogOpen, setEditPlayerDialogOpen] = useState(false);
   const [creatureToEdit, setCreatureToEdit] = useState(null);
+  const [playerToEdit, setPlayerToEdit] = useState(null);
   const [editingInitiativeId, setEditingInitiativeId] = useState(null);
   const [initiativeInputValue, setInitiativeInputValue] = useState('');
   const [hpInputValues, setHpInputValues] = useState({});
@@ -117,6 +120,7 @@ function BattleTab({
   const [creatureToElite, setCreatureToElite] = useState(null);
   const [selectedAction, setSelectedAction] = useState(null);
   const [showActionModal, setShowActionModal] = useState(false);
+  const activeParticipantRef = useRef(null);
 
   const handleStartBattle = () => {
     if (participants.length > 0) {
@@ -161,10 +165,18 @@ function BattleTab({
   };
 
   const handleEditCreatureChange = (field, value) => {
-    setCreatureToEdit(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    if (field === 'skills') {
+      // Special handling for skills to ensure we're updating the entire skills object
+      setCreatureToEdit(prev => ({
+        ...prev,
+        skills: value
+      }));
+    } else {
+      setCreatureToEdit(prev => ({
+        ...prev,
+        [field]: value
+      }));
+    }
   };
 
   const handleEditCreatureSave = () => {
@@ -173,6 +185,26 @@ function BattleTab({
     }
     setEditCreatureDialogOpen(false);
     setCreatureToEdit(null);
+  };
+
+  const handleEditPlayerClick = (player) => {
+    setPlayerToEdit(player);
+    setEditPlayerDialogOpen(true);
+  };
+
+  const handleEditPlayerChange = (field, value) => {
+    setPlayerToEdit(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleEditPlayerSave = () => {
+    if (playerToEdit && onUpdateBattleParticipant) {
+      onUpdateBattleParticipant(playerToEdit);
+    }
+    setEditPlayerDialogOpen(false);
+    setPlayerToEdit(null);
   };
 
   const handleInitiativeClick = (participant) => {
@@ -833,7 +865,7 @@ function BattleTab({
     }
   };
 
-  // Modify handleFinishTurn to apply persistent damage
+  // Modify handleFinishTurn to scroll to active participant
   const handleFinishTurn = () => {
     if (onFinishTurn) {
       const currentParticipant = participants.find(p => p.battleId === currentTurn);
@@ -846,6 +878,13 @@ function BattleTab({
         }));
       }
       onFinishTurn();
+      
+      // Use setTimeout to ensure the DOM has updated with the new currentTurn
+      setTimeout(() => {
+        if (activeParticipantRef.current) {
+          activeParticipantRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 100);
     }
   };
 
@@ -932,6 +971,22 @@ function BattleTab({
         updatedCreature[stat] = Number(updatedCreature[stat]) - 2;
       }
     });
+
+    if (Array.isArray(updatedCreature.attacks)) {
+      updatedCreature.attacks = updatedCreature.attacks.map(attack => {
+        const updatedAttack = { ...attack };
+        for (const key in updatedAttack) {
+          if (
+            updatedAttack.hasOwnProperty(key) &&
+            typeof updatedAttack[key] === 'number' &&
+            key.toLowerCase().includes('mod')
+          ) {
+            updatedAttack[key] -= 2;
+          }
+        }
+        return updatedAttack;
+      });
+    }
 
     // Decrease HP based on level
     if (updatedCreature.maxHp) {
@@ -1024,6 +1079,22 @@ function BattleTab({
       }
     });
 
+    if (Array.isArray(updatedCreature.attacks)) {
+      updatedCreature.attacks = updatedCreature.attacks.map(attack => {
+        const updatedAttack = { ...attack };
+        for (const key in updatedAttack) {
+          if (
+            updatedAttack.hasOwnProperty(key) &&
+            typeof updatedAttack[key] === 'number' &&
+            key.toLowerCase().includes('mod')
+          ) {
+            updatedAttack[key] += 2;
+          }
+        }
+        return updatedAttack;
+      });
+    }
+
     // Increase HP based on level
     if (updatedCreature.maxHp) {
       const level = Number(updatedCreature.level) || 1;
@@ -1111,56 +1182,51 @@ function BattleTab({
         <Container fluid>
           <Row>
             <Col md={showConditionsMenu ? 9 : 12}>
-              <Card>
-                <Card.Header className="d-flex flex-column">
-                  <div className="d-flex align-items-center gap-3">
-                    <h5 className="mb-0">Battle</h5>
-                    <span className="badge bg-secondary">Round: {currentRound}</span>
-                  </div>
-                  <div className="menu-btn-group mt-2" style={{ justifyContent: 'flex-end' }}>
-                    <Button
-                      variant="outline-secondary"
-                      size="sm"
-                      onClick={() => setShowConditionsMenu(!showConditionsMenu)}
-                    >
-                      {showConditionsMenu ? 'Hide' : 'Show'} Conditions
-                    </Button>
-                    {!isBattleStarted ? (
+              <div style={{ position: 'sticky', top: 0, zIndex: 1000, backgroundColor: 'white' }}>
+                <Card>
+                  <Card.Header className="d-flex flex-column">
+                    <div className="d-flex align-items-center gap-3">
+                      <h5 className="mb-0">Battle</h5>
+                      <span className="badge bg-secondary">Round: {currentRound}</span>
+                    </div>
+                    <div className="menu-btn-group mt-2" style={{ justifyContent: 'flex-end' }}>
                       <Button
-                        variant="primary"
-                        onClick={handleStartBattle}
-                        disabled={participants.length === 0}
+                        variant="outline-secondary"
+                        size="sm"
+                        onClick={() => setShowConditionsMenu(!showConditionsMenu)}
                       >
-                        Start Battle
+                        {showConditionsMenu ? 'Hide' : 'Show'} Conditions
                       </Button>
-                    ) : (
-                      <>
+                      {!isBattleStarted ? (
                         <Button
                           variant="primary"
-                          onClick={handleFinishTurn}
+                          onClick={handleStartBattle}
+                          disabled={participants.length === 0}
                         >
-                          Finish Turn <ArrowRight />
+                          Start Battle
                         </Button>
-                        <Button
-                          variant="danger"
-                          onClick={handleEndBattleClick}
-                        >
-                          Finish Battle
-                        </Button>
-                      </>
-                    )}
-                    {!isBattleStarted && (
-                      <Button
-                        variant="outline-danger"
-                        size="sm"
-                        onClick={() => setRemoveAllDialogOpen(true)}
-                      >
-                        <Trash /> Remove All
-                      </Button>
-                    )}
-                  </div>
-                </Card.Header>
-                <ListGroup variant="flush">
+                      ) : (
+                        <>
+                          <Button
+                            variant="primary"
+                            onClick={handleFinishTurn}
+                          >
+                            Finish Turn <ArrowRight />
+                          </Button>
+                          <Button
+                            variant="danger"
+                            onClick={handleEndBattleClick}
+                          >
+                            Finish Battle
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </Card.Header>
+                </Card>
+              </div>
+              <div style={{ marginTop: '1rem' }}>
+                <ListGroup>
                   {participants.map((participant) => (
                     <Droppable
                       key={participant.battleId}
@@ -1169,8 +1235,12 @@ function BattleTab({
                     >
                       {(provided, snapshot) => (
                         <ListGroupItem
-                          ref={provided.innerRef}
+                          ref={currentTurn === participant.battleId ? activeParticipantRef : provided.innerRef}
                           {...provided.droppableProps}
+                          style={{
+                            scrollMarginTop: '120px',
+                            ...(currentTurn === participant.battleId ? {} : provided.draggableProps?.style)
+                          }}
                           className={`d-flex justify-content-between align-items-center ${
                             currentTurn === participant.battleId ? 'highlighted-turn' : ''
                           } ${
@@ -1241,6 +1311,8 @@ function BattleTab({
                                   onHpAdd={handleHpAdd}
                                   onHpSubtract={handleHpSubtract}
                                   onTempHpAdd={handleTempHpAdd}
+                                  onDeleteClick={handleDeleteClick}
+                                  onEditPlayerClick={handleEditPlayerClick}
                                 />
                               )}
                             </div>
@@ -1342,7 +1414,7 @@ function BattleTab({
                               </div>
                             )}
                           </div>
-                          <div className="d-flex gap-2 ms-auto">
+                          {/* <div className="d-flex gap-2 ms-auto">
                             <Button
                               variant={currentTurn === participant.battleId ? "light" : "outline-danger"}
                               size="sm"
@@ -1378,18 +1450,20 @@ function BattleTab({
                                 </Button>
                               </>
                             )}
-                          </div>
+                          </div> */}
                           {provided.placeholder}
                         </ListGroupItem>
                       )}
                     </Droppable>
                   ))}
                 </ListGroup>
-              </Card>
+              </div>
             </Col>
             {showConditionsMenu && (
               <Col md={3}>
-                <ConditionsMenu isBattleStarted={isBattleStarted} />
+                <div style={{ position: 'sticky', top: 0, zIndex: 1000 }}>
+                  <ConditionsMenu isBattleStarted={isBattleStarted} />
+                </div>
               </Col>
             )}
           </Row>
@@ -1646,6 +1720,13 @@ function BattleTab({
                           />
                         </div>
 
+                        <div className="mb-3">
+                          <CreatureSkillsForm
+                            skills={creatureToEdit.skills || {}}
+                            onChange={skills => handleEditCreatureChange('skills', skills)}
+                          />
+                        </div>
+
                         <div className="d-flex justify-content-end gap-2">
                           <Button variant="secondary" onClick={() => setEditCreatureDialogOpen(false)} type="button">Cancel</Button>
                           <Button variant="primary" type="submit">Save</Button>
@@ -1712,6 +1793,64 @@ function BattleTab({
                 </div>
                 <div className="modal-footer">
                   <Button variant="secondary" onClick={() => setShowConditionModal(false)}>Close</Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Player Edit Dialog */}
+        {editPlayerDialogOpen && playerToEdit && (
+          <div className="modal show fade d-block" tabIndex="-1" role="dialog" style={{ background: 'rgba(0,0,0,0.5)' }}>
+            <div className="modal-dialog" role="document">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Edit Player</h5>
+                  <button type="button" className="btn-close" onClick={() => setEditPlayerDialogOpen(false)}></button>
+                </div>
+                <div className="modal-body">
+                  <form onSubmit={e => { e.preventDefault(); handleEditPlayerSave(); }}>
+                    <div className="mb-3">
+                      <label className="form-label">Player Name</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={playerToEdit.name}
+                        onChange={e => handleEditPlayerChange('name', e.target.value)}
+                      />
+                    </div>
+                    <div className="mb-3">
+                      <label className="form-label">HP</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={playerToEdit.maxHp}
+                        onChange={e => handleEditPlayerChange('maxHp', e.target.value)}
+                      />
+                    </div>
+                    <div className="mb-3">
+                      <label className="form-label">AC</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={playerToEdit.ac}
+                        onChange={e => handleEditPlayerChange('ac', e.target.value)}
+                      />
+                    </div>
+                    <div className="mb-3">
+                      <label className="form-label">Level</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={playerToEdit.level}
+                        onChange={e => handleEditPlayerChange('level', e.target.value)}
+                      />
+                    </div>
+                    <div className="d-flex justify-content-end gap-2">
+                      <Button variant="secondary" onClick={() => setEditPlayerDialogOpen(false)} type="button">Cancel</Button>
+                      <Button variant="primary" type="submit">Save</Button>
+                    </div>
+                  </form>
                 </div>
               </div>
             </div>

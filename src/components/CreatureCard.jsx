@@ -472,7 +472,7 @@ function CreatureCard({
         )}
       </div>
 
-      <div className="d-flex gap-2 ms-auto">
+      <div style={{ paddingTop: '20px' }} className="d-flex gap-2 ms-auto">
         <Button
           variant={currentTurn === participant.battleId ? "light" : "outline-danger"}
           size="sm"

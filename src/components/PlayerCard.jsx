@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from 'react-bootstrap';
-import { Plus, Dash } from 'react-bootstrap-icons';
+import { Plus, Dash, Trash, Pencil, } from 'react-bootstrap-icons';
 
 function PlayerCard({
   participant,
@@ -9,6 +9,8 @@ function PlayerCard({
   tempHpInputValues,
   onHpInputChange,
   onTempHpInputChange,
+  onDeleteClick,
+  onEditPlayerClick,
   onHpAdd,
   onHpSubtract,
   onTempHpAdd
@@ -21,7 +23,8 @@ function PlayerCard({
   };
 
   return (
-    <div className="d-flex flex-column align-items-start ms-2 mb-1">
+    <div>
+    {/* <div className="d-flex flex-column align-items-start ms-2 mb-1"> */}
       <div className="mb-1">
         HP: {participant.hp} / {participant.maxHp !== undefined && participant.maxHp !== '' ? participant.maxHp : participant.hp}
         {participant.tempHp > 0 && (
@@ -86,7 +89,42 @@ function PlayerCard({
           <span className="ms-2">Level: {renderStatWithStyle('level', participant.level)}</span>
         )}
       </div>
+
+      <div style={{ paddingTop: '20px' }} className="d-flex gap-2 ms-auto">
+        <Button
+          variant={currentTurn === participant.battleId ? "light" : "outline-danger"}
+          size="sm"
+          onClick={() => onDeleteClick(participant)}
+        >
+          <Trash />
+        </Button>
+        {/* <Button
+          variant={currentTurn === participant.battleId ? "light" : participant.isWeak ? "warning" : "outline-warning"}
+          size="sm"
+          className="ms-1"
+          onClick={() => onWeakAdjustment(participant)}
+        >
+          {participant.isWeak ? 'WEAK ✓' : 'WEAK'}
+        </Button>
+        <Button
+          variant={currentTurn === participant.battleId ? "light" : participant.isElite ? "success" : "outline-success"}
+          size="sm"
+          className="ms-1"
+          onClick={() => onEliteAdjustment(participant)}
+        >
+          {participant.isElite ? 'ELITE ✓' : 'ELITE'}
+        </Button> */}
+        <Button
+          variant={currentTurn === participant.battleId ? "light" : "outline-primary"}
+          size="sm"
+          className="ms-1"
+          onClick={() => onEditPlayerClick(participant)}
+        >
+          <Pencil />
+        </Button>
+      </div>
     </div>
+    
   );
 }
 

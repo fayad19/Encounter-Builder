@@ -125,7 +125,8 @@ function MonsterDetailModal({ monster, show, onHide, onImportToCreatures }) {
         value: weak.value || '',
         exceptions: weak.exceptions || []
       })) || [],
-      items: monster.items
+      items: monster.items,
+      skills: monster.system.skills || {}
     };
 
     // Now add attacks and spells to the creature.attacks array

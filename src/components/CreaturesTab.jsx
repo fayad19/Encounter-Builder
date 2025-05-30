@@ -6,6 +6,7 @@ import Dropdown from 'react-bootstrap/Dropdown';
 import DropdownButton from 'react-bootstrap/DropdownButton';
 import CreatureAttackForm from './CreatureAttackForm';
 import CreatureActionForm from './CreatureActionForm';
+import CreatureSkillsForm from './CreatureSkillsForm';
 
 function CreaturesTab({ 
   savedCreatures = [], 
@@ -29,7 +30,8 @@ function CreaturesTab({
     resistances: [], // Add resistances array
     immunities: [], // Add immunities array
     weaknesses: [], // Add weaknesses array
-    actions: [] // Add actions array
+    actions: [], // Add actions array
+    skills: {} // Add skills object
   });
   const [editingCreature, setEditingCreature] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -199,7 +201,8 @@ function CreaturesTab({
         resistances: [],
         immunities: [],
         weaknesses: [],
-        actions: []
+        actions: [],
+        skills: {}
       });
     }
   };
@@ -221,7 +224,8 @@ function CreaturesTab({
       resistances: creature.resistances || [],
       immunities: creature.immunities || [],
       weaknesses: creature.weaknesses || [],
-      actions: creature.actions || []
+      actions: creature.actions || [],
+      skills: creature.skills || {}
     });
     setEditingCreature(creature);
   };
@@ -243,7 +247,8 @@ function CreaturesTab({
       resistances: [],
       immunities: [],
       weaknesses: [],
-      actions: []
+      actions: [],
+      skills: {}
     });
   };
 
@@ -574,6 +579,12 @@ function CreaturesTab({
                     ...prev,
                     actions: prev.actions.filter((_, i) => i !== index)
                   }))}
+                />
+
+                {/* Add Skills Form after the saves section */}
+                <CreatureSkillsForm
+                  skills={newCreature.skills}
+                  onChange={skills => setNewCreature(prev => ({ ...prev, skills }))}
                 />
                 
                 <div className="d-flex gap-2">
