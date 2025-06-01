@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Modal, Table, Button } from 'react-bootstrap';
 import { getSpellBySlug, SPELL_NAME_MAPPING } from '../services/spellDB';
 import SharedSpellModal from './SharedSpellModal';
-import { extractResistancesFromRules } from '../utils/creatureConversion';
+import { extractResistancesFromRules, convertMonsterToCreature } from '../utils/creatureConversion';
 import quickRefData from '../data/quickRef.json';
 
 function MonsterDetailModal({ monster, show, onHide, onImportToCreatures }) {
@@ -59,150 +59,8 @@ function MonsterDetailModal({ monster, show, onHide, onImportToCreatures }) {
     });
   }
 
-  const convertMonsterToCreature = () => {
-    // Gather resistances from both attributes and rules
-    const attrResistances = monster.system.attributes.resistances?.map(res => ({
-      type: res.type,
-      value: res.value || '',
-      exceptions: res.exceptions || []
-    })) || [];
-    const ruleResistances = extractResistancesFromRules(monster).map(res => ({
-      type: res.type,
-      value: res.value || '',
-      exceptions: res.exceptions || []
-    }));
-    // Merge, avoiding duplicates (by type+value+exceptions)
-    const resistanceKey = r => `${r.type}-${r.value}-${(r.exceptions||[]).join(',')}`;
-    const allResistancesMap = new Map();
-    attrResistances.concat(ruleResistances).forEach(r => {
-      allResistancesMap.set(resistanceKey(r), r);
-    });
-    const allResistances = Array.from(allResistancesMap.values());
-
-    // Define the creature object first, so attacks can be added to it
-    const calculateSpellStats = (monster) => {
-      // Find the highest mental ability score (INT, WIS, or CHA)
-      const mentalScores = {
-        int: monster.system.abilities.int.mod,
-        wis: monster.system.abilities.wis.mod,
-        cha: monster.system.abilities.cha.mod
-      };
-      const highestMental = Math.max(...Object.values(mentalScores));
-      
-      // Calculate spell DC and attack modifier
-      // DC = 10 + monster level + highest mental ability modifier
-      // Spell Attack = monster level + highest mental ability modifier
-      const spellDC = 10 + monster.level + highestMental;
-      const spellAttackMod = monster.level + highestMental;
-      
-      return { spellDC, spellAttackMod };
-    };
-
-    const { spellDC, spellAttackMod } = calculateSpellStats(monster);
-
-    const creature = {
-      id: Date.now(),
-      name: monster.name,
-      hp: monster.system.attributes.hp.max,
-      maxHp: monster.system.attributes.hp.max,
-      ac: monster.system.attributes.ac.value,
-      perception: monster.system.perception.value,
-      fortitude: monster.system.saves.fortitude.value,
-      reflex: monster.system.saves.reflex.value,
-      will: monster.system.saves.will.value,
-      level: monster.level,
-      dc: spellDC,
-      spellAttackMod: spellAttackMod,
-      attacks: [],
-      actions: [],
-      resistances: allResistances,
-      immunities: monster.system.attributes.immunities?.map(imm => ({
-        type: imm.type,
-        exceptions: imm.exceptions || []
-      })) || [],
-      weaknesses: monster.system.attributes.weaknesses?.map(weak => ({
-        type: weak.type,
-        value: weak.value || '',
-        exceptions: weak.exceptions || []
-      })) || [],
-      items: monster.items,
-      skills: monster.system.skills || {}
-    };
-
-    // Now add attacks and spells to the creature.attacks array
-    if (monster.items) {
-      monster.items.forEach(item => {
-        if (item.type === 'melee' || item.type === 'ranged') {
-          creature.attacks.push({
-            attackName: item.name,
-            attackType: item.type,
-            attackCategory: item.type,
-            firstHitModifier: item.system.bonus?.value || 0,
-            secondHitModifier: item.system.bonus?.value ? item.system.bonus.value - 5 : -5,
-            thirdHitModifier: item.system.bonus?.value ? item.system.bonus.value - 10 : -10,
-            damage: Object.values(item.system.damageRolls || {})
-              .map(roll => `${roll.damage} ${roll.damageType}`)
-              .join(' plus ')
-          });
-        } else if (item.type === 'spell') {
-          const hasDirectDamage = item.system.damage && Object.keys(item.system.damage).length > 0;
-          const spellType = hasDirectDamage ? 'spell' : 'regularSpell';
-          const getSpellName = (item) => {
-            if (item.system.publication?.remaster) {
-              return item.name;
-            }
-            return SPELL_NAME_MAPPING[item.name] || item.name;
-          };
-          const spellAttack = {
-            attackName: getSpellName(item),
-            attackType: spellType,
-            attackCategory: spellType,
-            actions: item.system.time?.value || '2',
-            range: item.system.range?.value || '',
-            description: processDescription(item.system.description?.value),
-            targetOrArea: item.system.area ? 'area' : 'target',
-            slug: item.system.slug || ''
-          };
-          if (item.system.area) {
-            spellAttack.area = `${item.system.area.value}-foot ${item.system.area.type}`;
-            spellAttack.areaType = item.system.area.type;
-          }
-          if (item.system.defense?.save) {
-            spellAttack.save = item.system.defense.save.statistic;
-            if (item.system.defense.save.basic) {
-              spellAttack.save += ' (basic)';
-            }
-          }
-          if (hasDirectDamage) {
-            const damageFormulas = Object.values(item.system.damage)
-              .map(damage => `${damage.formula} ${damage.type}`)
-              .join(' plus ');
-            spellAttack.damage = damageFormulas;
-          }
-          if (item.system.duration?.value) {
-            spellAttack.duration = item.system.duration.value;
-          }
-          if (item.system.target?.value) {
-            spellAttack.targets = item.system.target.value;
-          }
-          creature.attacks.push(spellAttack);
-        } else if (item.type === 'action') {
-          creature.actions.push({
-            name: item.name,
-            actionType: item.system.actionType.value,
-            actions: item.system.actions?.value || null,
-            description: item.system.description?.value || '',
-            traits: item.system.traits?.value || []
-          });
-        }
-      });
-    }
-
-    return creature;
-  };
-
   const handleImport = () => {
-    const creature = convertMonsterToCreature();
+    const creature = convertMonsterToCreature(monster);
     if (onImportToCreatures) {
       onImportToCreatures(creature);
       onHide();

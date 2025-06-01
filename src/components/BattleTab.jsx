@@ -121,6 +121,8 @@ function BattleTab({
   const [selectedAction, setSelectedAction] = useState(null);
   const [showActionModal, setShowActionModal] = useState(false);
   const activeParticipantRef = useRef(null);
+  // Add state to track pending persistent damage checks
+  const [pendingPersistentDamageCheck, setPendingPersistentDamageCheck] = useState(null);
 
   const handleStartBattle = () => {
     if (participants.length > 0) {
@@ -785,7 +787,37 @@ function BattleTab({
     return () => { window.updateBattleParticipantInitiative = undefined; };
   }, []);
 
-  // Add function to handle persistent damage application
+  // Add effect to handle persistent damage checks after HP updates
+  useEffect(() => {
+    if (pendingPersistentDamageCheck) {
+      const { participantId, instances } = pendingPersistentDamageCheck;
+      const participant = participants.find(p => p.battleId === participantId);
+      
+      if (participant) {
+        // If HP is 0, remove all persistent damage
+        if (Number(participant.hp) === 0) {
+          const { persistentDamage, ...remainingConditions } = participant.conditions;
+          onUpdateBattleParticipant({
+            ...participant,
+            conditions: remainingConditions
+          });
+        } else if (instances.length > 0) {
+          // Show dialog for first instance if HP is not 0
+          const firstInstance = instances[0];
+          setPersistentDamageDialog({
+            show: true,
+            participantId,
+            damageType: firstInstance.damageType,
+            damageValue: firstInstance.damageValue,
+            remainingInstances: instances.slice(1)
+          });
+        }
+      }
+      setPendingPersistentDamageCheck(null);
+    }
+  }, [participants, pendingPersistentDamageCheck]);
+
+  // Modify handlePersistentDamage function
   const handlePersistentDamage = (participant) => {
     if (!participant.conditions?.persistentDamage) return;
 
@@ -799,69 +831,20 @@ function BattleTab({
     });
 
     // Apply total damage
-    if (totalDamage > 0 && onUpdateParticipantHP) {
-      const newHp = Math.max(0, Number(participant.hp) - totalDamage);
-      onUpdateParticipantHP(participant.battleId, newHp);
-      // Recalculate resistances after HP change
-      const updatedParticipant = { ...participant, hp: newHp };
-      const updatedResistances = calculateCurrentResistances(updatedParticipant);
-      onUpdateBattleParticipant({
-        ...updatedParticipant,
-        resistances: updatedResistances
-      });
-    }
-
-    // Show removal check dialog for each instance
-    if (persistentDamageInstances.length > 0) {
-      const firstInstance = persistentDamageInstances[0];
-      setPersistentDamageDialog({
-        show: true,
-        participantId: participant.battleId,
-        damageType: firstInstance.damageType,
-        damageValue: firstInstance.damageValue,
-        remainingInstances: persistentDamageInstances.slice(1)
-      });
-    }
-  };
-
-  // Add function to handle persistent damage removal check
-  const handlePersistentDamageCheck = (shouldRemove) => {
-    const { participantId, damageType, damageValue, remainingInstances } = persistentDamageDialog;
-    const participant = participants.find(p => p.battleId === participantId);
-    
-    if (!participant) return;
-
-    if (shouldRemove) {
-      // Remove this instance of persistent damage
-      const updatedParticipant = { ...participant };
-      const instances = updatedParticipant.conditions.persistentDamage.instances || [];
-      const newInstances = instances.filter(instance => 
-        !(instance.damageType === damageType && instance.damageValue === damageValue)
-      );
-
-      if (newInstances.length === 0) {
-        // Remove the entire condition if no instances remain
-        const { persistentDamage, ...remainingConditions } = updatedParticipant.conditions;
-        updatedParticipant.conditions = remainingConditions;
-      } else {
-        updatedParticipant.conditions.persistentDamage.instances = newInstances;
+    if (totalDamage > 0) {
+      if (typeof window.handleParticipantDamage === 'function') {
+        window.handleParticipantDamage(participant.battleId, totalDamage);
+      } else if (onUpdateParticipantHP) {
+        // Fallback to old behavior if new function not available
+        const newHp = Math.max(0, Number(participant.hp) - totalDamage);
+        onUpdateParticipantHP(participant.battleId, newHp);
       }
 
-      onUpdateBattleParticipant(updatedParticipant);
-    }
-
-    // Show dialog for next instance if any remain
-    if (remainingInstances && remainingInstances.length > 0) {
-      const nextInstance = remainingInstances[0];
-      setPersistentDamageDialog({
-        show: true,
-        participantId,
-        damageType: nextInstance.damageType,
-        damageValue: nextInstance.damageValue,
-        remainingInstances: remainingInstances.slice(1)
+      // Set pending check to be handled by useEffect after HP update
+      setPendingPersistentDamageCheck({
+        participantId: participant.battleId,
+        instances: persistentDamageInstances
       });
-    } else {
-      setPersistentDamageDialog({ show: false });
     }
   };
 
@@ -1235,11 +1218,11 @@ function BattleTab({
                     >
                       {(provided, snapshot) => (
                         <ListGroupItem
-                          ref={currentTurn === participant.battleId ? activeParticipantRef : provided.innerRef}
+                          ref={provided.innerRef}
                           {...provided.droppableProps}
                           style={{
                             scrollMarginTop: '120px',
-                            ...(currentTurn === participant.battleId ? {} : provided.draggableProps?.style)
+                            ...provided.draggableProps?.style
                           }}
                           className={`d-flex justify-content-between align-items-center ${
                             currentTurn === participant.battleId ? 'highlighted-turn' : ''
@@ -1251,6 +1234,10 @@ function BattleTab({
                             snapshot.isDraggingOver ? 'droppable-active' : ''
                           }`}
                         >
+                          {/* Add a separate div for the active participant ref */}
+                          {currentTurn === participant.battleId && (
+                            <div ref={activeParticipantRef} style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0 }} />
+                          )}
                           <div className="d-flex flex-column flex-grow-1">
                             <div>
                               <strong>{participant.name}</strong>
@@ -1414,43 +1401,6 @@ function BattleTab({
                               </div>
                             )}
                           </div>
-                          {/* <div className="d-flex gap-2 ms-auto">
-                            <Button
-                              variant={currentTurn === participant.battleId ? "light" : "outline-danger"}
-                              size="sm"
-                              onClick={() => handleDeleteClick(participant)}
-                            >
-                              <Trash />
-                            </Button>
-                            {participant.type === 'creature' && (
-                              <>
-                                <Button
-                                  variant={currentTurn === participant.battleId ? "light" : participant.isWeak ? "warning" : "outline-warning"}
-                                  size="sm"
-                                  className="ms-1"
-                                  onClick={() => handleWeakAdjustment(participant)}
-                                >
-                                  {participant.isWeak ? 'WEAK ✓' : 'WEAK'}
-                                </Button>
-                                <Button
-                                  variant={currentTurn === participant.battleId ? "light" : participant.isElite ? "success" : "outline-success"}
-                                  size="sm"
-                                  className="ms-1"
-                                  onClick={() => handleEliteAdjustment(participant)}
-                                >
-                                  {participant.isElite ? 'ELITE ✓' : 'ELITE'}
-                                </Button>
-                                <Button
-                                  variant={currentTurn === participant.battleId ? "light" : "outline-primary"}
-                                  size="sm"
-                                  className="ms-1"
-                                  onClick={() => handleEditCreatureClick(participant)}
-                                >
-                                  <Pencil />
-                                </Button>
-                              </>
-                            )}
-                          </div> */}
                           {provided.placeholder}
                         </ListGroupItem>
                       )}
