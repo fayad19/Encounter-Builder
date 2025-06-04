@@ -4,7 +4,7 @@ import MonsterDetailModal from './MonsterDetailModal';
 import monsterSummary from '../data/monster-summary.json';
 import { searchMonsters } from '../services/monsterDB';
 import { Plus } from 'react-bootstrap-icons';
-import { extractResistancesFromRules } from '../utils/creatureConversion';
+import { extractResistancesFromRules, convertMonsterToCreature } from '../utils/creatureConversion';
 
 function BestiaryTab({ onAddCreature }) {
   const [monsters, setMonsters] = useState([]);
@@ -229,129 +229,17 @@ function BestiaryTab({ onAddCreature }) {
                   title="Import to Creatures"
                   onClick={async (e) => {
                     e.stopPropagation();
+                    setLoading(true);
+                    setError(null);
                     try {
                       const results = await searchMonsters({ nameSearch: monster.name });
                       if (results.length === 0) throw new Error('Monster not found in database');
-                      const monsterData = results[0];
-                      const attrResistances = monsterData.system.attributes.resistances?.map(res => ({
-                        type: res.type,
-                        value: res.value || '',
-                        exceptions: res.exceptions || []
-                      })) || [];
-                      const ruleResistances = extractResistancesFromRules(monsterData).map(res => ({
-                        type: res.type,
-                        value: res.value || '',
-                        exceptions: res.exceptions || []
-                      }));
-                      const resistanceKey = r => `${r.type}-${r.value}-${(r.exceptions||[]).join(',')}`;
-                      const allResistancesMap = new Map();
-                      attrResistances.concat(ruleResistances).forEach(r => {
-                        allResistancesMap.set(resistanceKey(r), r);
-                      });
-                      const allResistances = Array.from(allResistancesMap.values());
-
-                      // Calculate spell DC and attack modifier
-                      const mentalScores = {
-                        int: monsterData.system.abilities.int.mod,
-                        wis: monsterData.system.abilities.wis.mod,
-                        cha: monsterData.system.abilities.cha.mod
-                      };
-                      const highestMental = Math.max(...Object.values(mentalScores));
-                      const spellDC = 10 + monsterData.level + highestMental;
-                      const spellAttackMod = monsterData.level + highestMental;
-
-                      const creature = {
-                        id: Date.now(),
-                        name: monsterData.name,
-                        hp: monsterData.system.attributes.hp.max,
-                        maxHp: monsterData.system.attributes.hp.max,
-                        ac: monsterData.system.attributes.ac.value,
-                        perception: monsterData.system.perception.value,
-                        fortitude: monsterData.system.saves.fortitude.value,
-                        reflex: monsterData.system.saves.reflex.value,
-                        will: monsterData.system.saves.will.value,
-                        level: monsterData.level,
-                        dc: spellDC,
-                        spellAttackMod: spellAttackMod,
-                        attacks: [],
-                        actions: [],
-                        resistances: allResistances,
-                        immunities: monsterData.system.attributes.immunities?.map(imm => ({
-                          type: imm.type,
-                          exceptions: imm.exceptions || []
-                        })) || [],
-                        weaknesses: monsterData.system.attributes.weaknesses?.map(weak => ({
-                          type: weak.type,
-                          value: weak.value || '',
-                          exceptions: weak.exceptions || []
-                        })) || [],
-                        items: monsterData.items
-                      };
-                      if (monsterData.items) {
-                        monsterData.items.forEach(item => {
-                          if (item.type === 'melee' || item.type === 'ranged') {
-                            creature.attacks.push({
-                              attackName: item.name,
-                              attackType: item.type,
-                              attackCategory: item.type,
-                              firstHitModifier: item.system.bonus?.value || 0,
-                              secondHitModifier: item.system.bonus?.value ? item.system.bonus.value - 5 : -5,
-                              thirdHitModifier: item.system.bonus?.value ? item.system.bonus.value - 10 : -10,
-                              damage: Object.values(item.system.damageRolls || {})
-                                .map(roll => `${roll.damage} ${roll.damageType}`)
-                                .join(' plus ')
-                            });
-                          } else if (item.type === 'spell') {
-                            const hasDirectDamage = item.system.damage && Object.keys(item.system.damage).length > 0;
-                            const spellType = hasDirectDamage ? 'spell' : 'regularSpell';
-                            const spellAttack = {
-                              attackName: item.name,
-                              attackType: spellType,
-                              attackCategory: spellType,
-                              actions: item.system.time?.value || '2',
-                              range: item.system.range?.value || '',
-                              description: item.system.description?.value || '',
-                              targetOrArea: item.system.area ? 'area' : 'target',
-                              slug: item.system.slug || ''
-                            };
-                            if (item.system.area) {
-                              spellAttack.area = `${item.system.area.value}-foot ${item.system.area.type}`;
-                              spellAttack.areaType = item.system.area.type;
-                            }
-                            if (item.system.defense?.save) {
-                              spellAttack.save = item.system.defense.save.statistic;
-                              if (item.system.defense.save.basic) {
-                                spellAttack.save += ' (basic)';
-                              }
-                            }
-                            if (hasDirectDamage) {
-                              const damageFormulas = Object.values(item.system.damage)
-                                .map(damage => `${damage.formula} ${damage.type}`)
-                                .join(' plus ');
-                              spellAttack.damage = damageFormulas;
-                            }
-                            if (item.system.duration?.value) {
-                              spellAttack.duration = item.system.duration.value;
-                            }
-                            if (item.system.target?.value) {
-                              spellAttack.targets = item.system.target.value;
-                            }
-                            creature.attacks.push(spellAttack);
-                          } else if (item.type === 'action') {
-                            creature.actions.push({
-                              name: item.name,
-                              actionType: item.system.actionType.value,
-                              actions: item.system.actions.value?.toString() || null,
-                              description: item.system.description.value,
-                              traits: item.system.traits.value || [],
-                              category: item.system.category || 'offensive'
-                            });
-                          }
-                        });
-                      }
-                      handleImportToCreatures(creature);
+                      const creature = convertMonsterToCreature(results[0]);
+                      if (onAddCreature) onAddCreature(creature);
                     } catch (err) {
-                      alert('Error importing monster: ' + err.message);
+                      setError(err.message);
+                    } finally {
+                      setLoading(false);
                     }
                   }}
                 >

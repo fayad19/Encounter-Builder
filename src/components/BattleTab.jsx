@@ -1,19 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Container, Row, Col, Card, Button, ListGroup, ListGroupItem, Badge, Modal } from 'react-bootstrap';
 import { ArrowRight, Trash, Pencil, Plus, X } from 'react-bootstrap-icons';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import InitiativeDialog from './InitiativeDialog';
 import DeleteConfirmationDialog from './DeleteConfirmationDialog';
 import ConditionsMenu, { CONDITIONS } from './ConditionsMenu';
-import action1 from '../assets/action-1.png';
-import action2 from '../assets/action-2.png';
-import action3 from '../assets/action-3.png';
-import freeAction from '../assets/action-free.png';
-import reaction from '../assets/action-reaction.png';
 import CreatureAttackForm from './CreatureAttackForm';
 import CreatureActionForm from './CreatureActionForm';
+import CreatureCard from './CreatureCard';
+import PlayerCard from './PlayerCard';
 import { calculateCurrentResistances } from '../utils/creatureConversion';
 import quickRefData from '../data/quickRef.json';
+import CreatureSkillsForm from './CreatureSkillsForm';
 
 // Add PersistentDamageDialog component
 function PersistentDamageDialog({ show, onHide, onConfirm, onCancel, damageType, damageValue }) {
@@ -97,7 +95,9 @@ function BattleTab({
   const [endBattleDialogOpen, setEndBattleDialogOpen] = useState(false);
   const [removeAllDialogOpen, setRemoveAllDialogOpen] = useState(false);
   const [editCreatureDialogOpen, setEditCreatureDialogOpen] = useState(false);
+  const [editPlayerDialogOpen, setEditPlayerDialogOpen] = useState(false);
   const [creatureToEdit, setCreatureToEdit] = useState(null);
+  const [playerToEdit, setPlayerToEdit] = useState(null);
   const [editingInitiativeId, setEditingInitiativeId] = useState(null);
   const [initiativeInputValue, setInitiativeInputValue] = useState('');
   const [hpInputValues, setHpInputValues] = useState({});
@@ -120,6 +120,9 @@ function BattleTab({
   const [creatureToElite, setCreatureToElite] = useState(null);
   const [selectedAction, setSelectedAction] = useState(null);
   const [showActionModal, setShowActionModal] = useState(false);
+  const activeParticipantRef = useRef(null);
+  // Add state to track pending persistent damage checks
+  const [pendingPersistentDamageCheck, setPendingPersistentDamageCheck] = useState(null);
 
   const handleStartBattle = () => {
     if (participants.length > 0) {
@@ -164,10 +167,18 @@ function BattleTab({
   };
 
   const handleEditCreatureChange = (field, value) => {
-    setCreatureToEdit(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    if (field === 'skills') {
+      // Special handling for skills to ensure we're updating the entire skills object
+      setCreatureToEdit(prev => ({
+        ...prev,
+        skills: value
+      }));
+    } else {
+      setCreatureToEdit(prev => ({
+        ...prev,
+        [field]: value
+      }));
+    }
   };
 
   const handleEditCreatureSave = () => {
@@ -176,6 +187,26 @@ function BattleTab({
     }
     setEditCreatureDialogOpen(false);
     setCreatureToEdit(null);
+  };
+
+  const handleEditPlayerClick = (player) => {
+    setPlayerToEdit(player);
+    setEditPlayerDialogOpen(true);
+  };
+
+  const handleEditPlayerChange = (field, value) => {
+    setPlayerToEdit(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleEditPlayerSave = () => {
+    if (playerToEdit && onUpdateBattleParticipant) {
+      onUpdateBattleParticipant(playerToEdit);
+    }
+    setEditPlayerDialogOpen(false);
+    setPlayerToEdit(null);
   };
 
   const handleInitiativeClick = (participant) => {
@@ -225,7 +256,7 @@ function BattleTab({
     setTempHpInputValues(prev => ({ ...prev, [battleId]: value }));
   };
 
-  const handleHpDeduct = (participant) => {
+  const handleHpSubtract = (participant) => {
     const value = Number(hpInputValues[participant.battleId]);
     if (!isNaN(value) && value !== 0) {
       if (onUpdateParticipantHP) {
@@ -242,7 +273,7 @@ function BattleTab({
     }
   };
 
-  const handleHpHeal = (participant) => {
+  const handleHpAdd = (participant) => {
     const value = Number(hpInputValues[participant.battleId]);
     if (!isNaN(value) && value !== 0) {
       if (onUpdateParticipantHP) {
@@ -756,119 +787,37 @@ function BattleTab({
     return () => { window.updateBattleParticipantInitiative = undefined; };
   }, []);
 
-  // Helper function to check if a stat is affected by conditions (optionally for a specific attack)
-  const isStatAffectedByConditions = (participant, stat, attack = null) => {
-    if (!participant.conditions) return false;
-    return Object.entries(participant.conditions).some(([conditionId, data]) => {
-      const condition = CONDITIONS[conditionId.toUpperCase().replace('-', '_')] ||
-        Object.values(CONDITIONS).find(c => c.id === conditionId);
-      if (!condition) return false;
-      // For attack modifiers, check for per-type keys
-      if ((stat === 'firstHitModifier' || stat === 'secondHitModifier' || stat === 'thirdHitModifier') && attack) {
-        const type = (attack.attackCategory || attack.attackType || '').toLowerCase();
-        let effectKey = '';
-        if (type === 'melee') effectKey = 'melee' + stat.charAt(0).toUpperCase() + stat.slice(1);
-        else if (type === 'ranged') effectKey = 'ranged' + stat.charAt(0).toUpperCase() + stat.slice(1);
-        else if (type === 'spell') effectKey = 'spell' + stat.charAt(0).toUpperCase() + stat.slice(1);
-        if (effectKey && effectKey in condition.effects) return true;
-      }
-      // For damage, only highlight if the condition affects the correct type
-      if (stat === 'meleeDamage' && attack) {
-        const type = (attack.attackCategory || attack.attackType || '').toLowerCase();
-        if (type === 'melee' && 'meleeDamage' in condition.effects) return true;
-        if (type === 'ranged' && 'rangedDamage' in condition.effects) return true;
-        if (type === 'spell' && 'spellDamage' in condition.effects) return true;
-      }
-      // Check if the condition affects this stat (for non-attack stats)
-      if (stat === 'ac' && 'ac' in condition.effects) return true;
-      if (stat === 'dc' && 'dc' in condition.effects) return true;
-      if (stat === 'perception' && 'perception' in condition.effects) return true;
-      if (stat === 'fortitude' && 'fortitude' in condition.effects) return true;
-      if (stat === 'reflex' && 'reflex' in condition.effects) return true;
-      if (stat === 'will' && 'will' in condition.effects) return true;
-      return false;
-    });
-  };
-
-  // Helper function to render a stat with conditional styling (optionally for a specific attack)
-  const renderStat = (participant, stat, value, attack = null) => {
-    const isAffected = isStatAffectedByConditions(participant, stat, attack);
-    const isModified = participant.isWeak || participant.isElite;
-    
-    if (value === null || value === undefined || value === '' || (typeof value !== 'string' && typeof value !== 'number')) {
-      return <span>—</span>;
-    }
-    
-    let style = {};
-    if (isAffected) {
-      style.color = 'red';
-    } else if (isModified) {
-      style.color = '#ff6be4'; // Purple color for modified stats
-    }
-    
-    return (
-      <span style={style}>
-        {value}
-      </span>
-    );
-  };
-
-  // Helper function to render attack modifiers
-  const renderAttackModifiers = (participant, attack) => {
-    const modifiers = [
-      attack.firstHitModifier,
-      attack.secondHitModifier,
-      attack.thirdHitModifier
-    ].filter(mod => mod !== null && mod !== undefined && mod !== '');
-
-    if (modifiers.length === 0) return null;
-
-    return modifiers.map((mod, index) => (
-      <React.Fragment key={index}>
-        {renderStat(participant, ['firstHitModifier', 'secondHitModifier', 'thirdHitModifier'][index], mod, attack)}
-        {index < modifiers.length - 1 ? '/' : ''}
-      </React.Fragment>
-    ));
-  };
-
-  // Helper function to render damage
-  const renderDamage = (participant, attack) => {
-    if (!attack.damage) return null;
-    return (
-      <span>
-        {' ('}
-        {renderStat(participant, 'meleeDamage', attack.damage, attack)}
-        {')'}
-      </span>
-    );
-  };
-
-  // Helper to safely get a numeric/string attack modifier for spells
-  const getSpellAttackModifier = atk => {
-    let result = '—';
-    if (typeof atk.firstHitModifier === 'number' || typeof atk.firstHitModifier === 'string') {
-      result = atk.firstHitModifier;
-    } else if (typeof atk.attackModifier === 'number' || typeof atk.attackModifier === 'string') {
-      result = atk.attackModifier;
-    } else if (atk.attackModifier && typeof atk.attackModifier === 'object') {
-      if ('value' in atk.attackModifier && (typeof atk.attackModifier.value === 'number' || typeof atk.attackModifier.value === 'string')) {
-        result = atk.attackModifier.value;
-      } else if ('modifier' in atk.attackModifier && (typeof atk.attackModifier.modifier === 'number' || typeof atk.attackModifier.modifier === 'string')) {
-        result = atk.attackModifier.modifier;
-      } else {
-        for (const key in atk.attackModifier) {
-          if (typeof atk.attackModifier[key] === 'number' || typeof atk.attackModifier[key] === 'string') {
-            result = atk.attackModifier[key];
-            break;
-          }
+  // Add effect to handle persistent damage checks after HP updates
+  useEffect(() => {
+    if (pendingPersistentDamageCheck) {
+      const { participantId, instances } = pendingPersistentDamageCheck;
+      const participant = participants.find(p => p.battleId === participantId);
+      
+      if (participant) {
+        // If HP is 0, remove all persistent damage
+        if (Number(participant.hp) === 0) {
+          const { persistentDamage, ...remainingConditions } = participant.conditions;
+          onUpdateBattleParticipant({
+            ...participant,
+            conditions: remainingConditions
+          });
+        } else if (instances.length > 0) {
+          // Show dialog for first instance if HP is not 0
+          const firstInstance = instances[0];
+          setPersistentDamageDialog({
+            show: true,
+            participantId,
+            damageType: firstInstance.damageType,
+            damageValue: firstInstance.damageValue,
+            remainingInstances: instances.slice(1)
+          });
         }
       }
+      setPendingPersistentDamageCheck(null);
     }
-    console.log('Spell attack modifier for', atk.attackName, ':', result, 'typeof:', typeof result);
-    return result;
-  };
+  }, [participants, pendingPersistentDamageCheck]);
 
-  // Add function to handle persistent damage application
+  // Modify handlePersistentDamage function
   const handlePersistentDamage = (participant) => {
     if (!participant.conditions?.persistentDamage) return;
 
@@ -882,73 +831,24 @@ function BattleTab({
     });
 
     // Apply total damage
-    if (totalDamage > 0 && onUpdateParticipantHP) {
-      const newHp = Math.max(0, Number(participant.hp) - totalDamage);
-      onUpdateParticipantHP(participant.battleId, newHp);
-      // Recalculate resistances after HP change
-      const updatedParticipant = { ...participant, hp: newHp };
-      const updatedResistances = calculateCurrentResistances(updatedParticipant);
-      onUpdateBattleParticipant({
-        ...updatedParticipant,
-        resistances: updatedResistances
-      });
-    }
-
-    // Show removal check dialog for each instance
-    if (persistentDamageInstances.length > 0) {
-      const firstInstance = persistentDamageInstances[0];
-      setPersistentDamageDialog({
-        show: true,
-        participantId: participant.battleId,
-        damageType: firstInstance.damageType,
-        damageValue: firstInstance.damageValue,
-        remainingInstances: persistentDamageInstances.slice(1)
-      });
-    }
-  };
-
-  // Add function to handle persistent damage removal check
-  const handlePersistentDamageCheck = (shouldRemove) => {
-    const { participantId, damageType, damageValue, remainingInstances } = persistentDamageDialog;
-    const participant = participants.find(p => p.battleId === participantId);
-    
-    if (!participant) return;
-
-    if (shouldRemove) {
-      // Remove this instance of persistent damage
-      const updatedParticipant = { ...participant };
-      const instances = updatedParticipant.conditions.persistentDamage.instances || [];
-      const newInstances = instances.filter(instance => 
-        !(instance.damageType === damageType && instance.damageValue === damageValue)
-      );
-
-      if (newInstances.length === 0) {
-        // Remove the entire condition if no instances remain
-        const { persistentDamage, ...remainingConditions } = updatedParticipant.conditions;
-        updatedParticipant.conditions = remainingConditions;
-      } else {
-        updatedParticipant.conditions.persistentDamage.instances = newInstances;
+    if (totalDamage > 0) {
+      if (typeof window.handleParticipantDamage === 'function') {
+        window.handleParticipantDamage(participant.battleId, totalDamage);
+      } else if (onUpdateParticipantHP) {
+        // Fallback to old behavior if new function not available
+        const newHp = Math.max(0, Number(participant.hp) - totalDamage);
+        onUpdateParticipantHP(participant.battleId, newHp);
       }
 
-      onUpdateBattleParticipant(updatedParticipant);
-    }
-
-    // Show dialog for next instance if any remain
-    if (remainingInstances && remainingInstances.length > 0) {
-      const nextInstance = remainingInstances[0];
-      setPersistentDamageDialog({
-        show: true,
-        participantId,
-        damageType: nextInstance.damageType,
-        damageValue: nextInstance.damageValue,
-        remainingInstances: remainingInstances.slice(1)
+      // Set pending check to be handled by useEffect after HP update
+      setPendingPersistentDamageCheck({
+        participantId: participant.battleId,
+        instances: persistentDamageInstances
       });
-    } else {
-      setPersistentDamageDialog({ show: false });
     }
   };
 
-  // Modify handleFinishTurn to apply persistent damage
+  // Modify handleFinishTurn to scroll to active participant
   const handleFinishTurn = () => {
     if (onFinishTurn) {
       const currentParticipant = participants.find(p => p.battleId === currentTurn);
@@ -961,6 +861,13 @@ function BattleTab({
         }));
       }
       onFinishTurn();
+      
+      // Use setTimeout to ensure the DOM has updated with the new currentTurn
+      setTimeout(() => {
+        if (activeParticipantRef.current) {
+          activeParticipantRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 100);
     }
   };
 
@@ -974,69 +881,6 @@ function BattleTab({
       }
     }
   }, [currentRound, isBattleStarted, currentTurn]);
-
-  // Add this helper function inside BattleTab
-  function renderRegularSpellsListLikeAttackSpells(attacks, expandedSpells, setExpandedSpells, participant) {
-    const spells = attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'regularSpell');
-    if (spells.length === 0) return null;
-    return (
-      <div className="mt-2">
-        <strong>Regular Spells:</strong>
-        <ul className="mb-0 ps-3">
-          {spells.map((atk, i) => {
-            const spellKey = `${participant.battleId}-regularSpell-${i}`;
-            const isExpanded = expandedSpells[spellKey];
-            let icon = null;
-            if (atk.actions === '1') icon = action1;
-            else if (atk.actions === '2') icon = action2;
-            else if (atk.actions === '3') icon = action3;
-            else if (atk.actions === 'free') icon = freeAction;
-            return (
-              atk.attackName ? (
-                <li key={spellKey} style={{ listStyleType: 'circle', cursor: atk.description ? 'pointer' : 'default' }} onClick={() => atk.description && setExpandedSpells(prev => ({ ...prev, [spellKey]: !prev[spellKey] }))}>
-                  <span className="text-muted"></span> <strong style={{ marginLeft: 4 }}>{atk.attackName}</strong>
-                  {icon && (
-                    <img
-                      src={icon}
-                      alt={`${atk.actions} action(s)`}
-                      style={{ height: '1.2em', verticalAlign: 'middle', marginLeft: 8, marginRight: 4 }}
-                    />
-                  )}
-                  {atk.range && <span>, Range: {atk.range}</span>}
-                  {atk.targets && <span>, Targets: {atk.targets}</span>}
-                  {atk.duration && <span>, Duration: {atk.duration}</span>}
-                  {atk.description && (
-                    <span className="ms-2" style={{ fontSize: '0.8em', color: '#666' }}>{isExpanded ? '▼' : '▶'}</span>
-                  )}
-                  {isExpanded && atk.description && (
-                    <div
-                      className="mt-1 mb-1"
-                      style={{ marginLeft: 24, padding: '8px', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #dee2e6' }}
-                      onClick={e => {
-                        const target = e.target;
-                        if (target.classList && target.classList.contains('condition-link')) {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          const condName = target.getAttribute('data-condition');
-                          const found = conditionList.find(c => c.name === condName);
-                          if (found) {
-                            setConditionModalData(found);
-                            setShowConditionModal(true);
-                          }
-                        }
-                      }}
-                    >
-                      {renderSpellDescription(atk.description)}
-                    </div>
-                  )}
-                </li>
-              ) : null
-            );
-          })}
-        </ul>
-      </div>
-    );
-  }
 
   // Move the effect here, inside BattleTab
   useEffect(() => {
@@ -1110,6 +954,22 @@ function BattleTab({
         updatedCreature[stat] = Number(updatedCreature[stat]) - 2;
       }
     });
+
+    if (Array.isArray(updatedCreature.attacks)) {
+      updatedCreature.attacks = updatedCreature.attacks.map(attack => {
+        const updatedAttack = { ...attack };
+        for (const key in updatedAttack) {
+          if (
+            updatedAttack.hasOwnProperty(key) &&
+            typeof updatedAttack[key] === 'number' &&
+            key.toLowerCase().includes('mod')
+          ) {
+            updatedAttack[key] -= 2;
+          }
+        }
+        return updatedAttack;
+      });
+    }
 
     // Decrease HP based on level
     if (updatedCreature.maxHp) {
@@ -1202,6 +1062,22 @@ function BattleTab({
       }
     });
 
+    if (Array.isArray(updatedCreature.attacks)) {
+      updatedCreature.attacks = updatedCreature.attacks.map(attack => {
+        const updatedAttack = { ...attack };
+        for (const key in updatedAttack) {
+          if (
+            updatedAttack.hasOwnProperty(key) &&
+            typeof updatedAttack[key] === 'number' &&
+            key.toLowerCase().includes('mod')
+          ) {
+            updatedAttack[key] += 2;
+          }
+        }
+        return updatedAttack;
+      });
+    }
+
     // Increase HP based on level
     if (updatedCreature.maxHp) {
       const level = Number(updatedCreature.level) || 1;
@@ -1237,67 +1113,6 @@ function BattleTab({
     }
 
     onUpdateBattleParticipant(updatedCreature);
-  };
-
-  const renderCreatureActions = (creature) => {
-    if (!creature.actions || creature.actions.length === 0) return null;
-
-    return (
-      <div className="mt-2">
-        <strong >Actions:</strong>
-        <ul className="mb-0 ps-3">
-          {creature.actions.map((action, index) => {
-            const actionKey = `${creature.battleId}-action-${index}`;
-            const isExpanded = expandedSpells[actionKey];
-            let icon = null;
-            if (action.actionType === 'action') {
-              if (action.actions === '1') icon = action1;
-              else if (action.actions === '2') icon = action2;
-              else if (action.actions === '3') icon = action3;
-            } else if (action.actionType === 'reaction') {
-              icon = reaction;
-            }
-
-            return (
-              <li key={actionKey} style={{ listStyleType: 'circle', cursor: action.description ? 'pointer' : 'default' }} onClick={() => action.description && setExpandedSpells(prev => ({ ...prev, [actionKey]: !prev[actionKey] }))}>
-                <span className="text-muted"></span> <strong style={{ marginLeft: 4 }}>{action.name}</strong>
-                {icon && (
-                  <img
-                    src={icon}
-                    alt={`${action.actions} action(s)`}
-                    style={{ height: '1.2em', verticalAlign: 'middle', marginLeft: 8, marginRight: 4 }}
-                  />
-                )}
-                {action.description && (
-                  <span className="ms-2" style={{ fontSize: '0.8em', color: '#666' }}>{isExpanded ? '▼' : '▶'}</span>
-                )}
-                {isExpanded && action.description && (
-                  <div
-                    className="mt-1 mb-1"
-                    style={{ marginLeft: 24, padding: '8px', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #dee2e6' }}
-                    onClick={e => {
-                      const target = e.target;
-                      if (target.classList && target.classList.contains('condition-link')) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const condName = target.getAttribute('data-condition');
-                        const found = conditionList.find(c => c.name === condName);
-                        if (found) {
-                          setConditionModalData(found);
-                          setShowConditionModal(true);
-                        }
-                      }
-                    }}
-                  >
-                    {renderSpellDescription(action.description)}
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-    );
   };
 
   const handleEliteToggle = (creature) => {
@@ -1350,56 +1165,51 @@ function BattleTab({
         <Container fluid>
           <Row>
             <Col md={showConditionsMenu ? 9 : 12}>
-              <Card>
-                <Card.Header className="d-flex flex-column">
-                  <div className="d-flex align-items-center gap-3">
-                    <h5 className="mb-0">Battle</h5>
-                    <span className="badge bg-secondary">Round: {currentRound}</span>
-                  </div>
-                  <div className="menu-btn-group mt-2" style={{ justifyContent: 'flex-end' }}>
-                    <Button
-                      variant="outline-secondary"
-                      size="sm"
-                      onClick={() => setShowConditionsMenu(!showConditionsMenu)}
-                    >
-                      {showConditionsMenu ? 'Hide' : 'Show'} Conditions
-                    </Button>
-                    {!isBattleStarted ? (
+              <div style={{ position: 'sticky', top: 0, zIndex: 1000, backgroundColor: 'white' }}>
+                <Card>
+                  <Card.Header className="d-flex flex-column">
+                    <div className="d-flex align-items-center gap-3">
+                      <h5 className="mb-0">Battle</h5>
+                      <span className="badge bg-secondary">Round: {currentRound}</span>
+                    </div>
+                    <div className="menu-btn-group mt-2" style={{ justifyContent: 'flex-end' }}>
                       <Button
-                        variant="primary"
-                        onClick={handleStartBattle}
-                        disabled={participants.length === 0}
+                        variant="outline-secondary"
+                        size="sm"
+                        onClick={() => setShowConditionsMenu(!showConditionsMenu)}
                       >
-                        Start Battle
+                        {showConditionsMenu ? 'Hide' : 'Show'} Conditions
                       </Button>
-                    ) : (
-                      <>
+                      {!isBattleStarted ? (
                         <Button
                           variant="primary"
-                          onClick={handleFinishTurn}
+                          onClick={handleStartBattle}
+                          disabled={participants.length === 0}
                         >
-                          Finish Turn <ArrowRight />
+                          Start Battle
                         </Button>
-                        <Button
-                          variant="danger"
-                          onClick={handleEndBattleClick}
-                        >
-                          Finish Battle
-                        </Button>
-                      </>
-                    )}
-                    {!isBattleStarted && (
-                      <Button
-                        variant="outline-danger"
-                        size="sm"
-                        onClick={() => setRemoveAllDialogOpen(true)}
-                      >
-                        <Trash /> Remove All
-                      </Button>
-                    )}
-                  </div>
-                </Card.Header>
-                <ListGroup variant="flush">
+                      ) : (
+                        <>
+                          <Button
+                            variant="primary"
+                            onClick={handleFinishTurn}
+                          >
+                            Finish Turn <ArrowRight />
+                          </Button>
+                          <Button
+                            variant="danger"
+                            onClick={handleEndBattleClick}
+                          >
+                            Finish Battle
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </Card.Header>
+                </Card>
+              </div>
+              <div style={{ marginTop: '1rem' }}>
+                <ListGroup>
                   {participants.map((participant) => (
                     <Droppable
                       key={participant.battleId}
@@ -1410,6 +1220,10 @@ function BattleTab({
                         <ListGroupItem
                           ref={provided.innerRef}
                           {...provided.droppableProps}
+                          style={{
+                            scrollMarginTop: '120px',
+                            ...provided.draggableProps?.style
+                          }}
                           className={`d-flex justify-content-between align-items-center ${
                             currentTurn === participant.battleId ? 'highlighted-turn' : ''
                           } ${
@@ -1420,6 +1234,10 @@ function BattleTab({
                             snapshot.isDraggingOver ? 'droppable-active' : ''
                           }`}
                         >
+                          {/* Add a separate div for the active participant ref */}
+                          {currentTurn === participant.battleId && (
+                            <div ref={activeParticipantRef} style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0 }} />
+                          )}
                           <div className="d-flex flex-column flex-grow-1">
                             <div>
                               <strong>{participant.name}</strong>
@@ -1450,336 +1268,41 @@ function BattleTab({
                             </div>
                             <div className="small text-muted mt-1">
                               {participant.type === 'creature' ? (
-                                <>
-                                  <div className="mb-1">
-                                    HP: {participant.hp} / {participant.maxHp !== undefined && participant.maxHp !== '' ? participant.maxHp : participant.hp}
-                                    {participant.tempHp > 0 && (
-                                      <span className="text-info ms-2">(+{participant.tempHp} temp)</span>
-                                    )}
-                                  </div>
-                                  <div className="d-flex flex-column ms-2 mb-1" style={{ gap: '0.5rem' }}>
-                                    <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
-                                      <input
-                                        type="number"
-                                        className="form-control d-inline-block"
-                                        style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
-                                        value={hpInputValues[participant.battleId] || ''}
-                                        onChange={e => handleHpInputChange(participant.battleId, e.target.value)}
-                                        placeholder="HP"
-                                      />
-                                      <Button
-                                        variant="outline-success"
-                                        size="sm"
-                                        className="ms-1"
-                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                                        onClick={() => handleHpHeal(participant)}
-                                        disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
-                                      >
-                                        +
-                                      </Button>
-                                      <Button
-                                        variant="outline-danger"
-                                        size="sm"
-                                        className="ms-1"
-                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                                        onClick={() => handleHpDeduct(participant)}
-                                        disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
-                                      >
-                                        -
-                                      </Button>
-                                    </div>
-                                    <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
-                                      <input
-                                        type="number"
-                                        className="form-control d-inline-block"
-                                        style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
-                                        value={tempHpInputValues[participant.battleId] || ''}
-                                        onChange={e => handleTempHpInputChange(participant.battleId, e.target.value)}
-                                        placeholder="Temp"
-                                      />
-                                      <Button
-                                        variant="outline-info"
-                                        size="sm"
-                                        className="ms-1"
-                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                                        onClick={() => handleTempHpAdd(participant)}
-                                        disabled={!tempHpInputValues[participant.battleId] || isNaN(Number(tempHpInputValues[participant.battleId]))}
-                                      >
-                                        +
-                                      </Button>
-                                    </div>
-                                  </div>
-                                  <div>
-                                    AC: {renderStat(participant, 'ac', participant.ac)}
-                                    <span className="ms-2">
-                                      Level: {renderStat(participant, 'level', participant.level)}
-                                    </span>
-                                  </div>
-                                  {participant.type === 'creature' && (
-                                    <div className="d-flex align-items-center mt-1" style={{ gap: '0.5rem' }}>
-                                      DC: {renderStat(participant, 'dc', participant.dc)}
-                                      <span className="ms-2">Spell Attack: {renderStat(participant, 'spellAttackMod', participant.spellAttackMod)}{participant.isWeak ? ' (-4 dmg)' : participant.isElite ? ' (+4 dmg)' : ''}</span>
-                                    </div>
-                                  )}
-                                  {(() => {
-                                    const currentResistances = calculateCurrentResistances(participant);
-                                    return currentResistances && currentResistances.length > 0 && (
-                                      <div className="mt-2">
-                                        <strong>Resistances:</strong>
-                                        <ul className={currentResistances.length > 2 ? "mb-0 ps-3 d-flex flex-wrap gap-2 list-unstyled flex-row" : "mb-0 ps-3"}>
-                                          {currentResistances.map((resistance, i) => (
-                                            <li key={`${participant.battleId}-resistance-${i}`} style={{ listStyleType: currentResistances.length > 2 ? 'none' : 'disc' }}>
-                                              {resistance.type} {resistance.value}
-                                              {currentResistances.length > 2 && i < currentResistances.length - 1 ? ',' : ''}
-                                            </li>
-                                          ))}
-                                        </ul>
-                                      </div>
-                                    );
-                                  })()}
-                                  {participant.immunities && participant.immunities.length > 0 && (
-                                    <div className="mt-2">
-                                      <strong>Immunities:</strong>
-                                      <ul className={participant.immunities.length > 2 ? "mb-0 ps-3 d-flex flex-wrap gap-2 list-unstyled flex-row" : "mb-0 ps-3"}>
-                                        {participant.immunities.map((immunity, i) => (
-                                          <li key={`${participant.battleId}-immunity-${i}`} style={{ listStyleType: participant.immunities.length > 2 ? 'none' : 'disc' }}>
-                                            {typeof immunity === 'string' ? immunity : immunity.type}
-                                            {typeof immunity === 'object' && immunity.exceptions && immunity.exceptions.length > 0 && 
-                                              ` (except ${immunity.exceptions.join(', ')})`}
-                                            {participant.immunities.length > 2 && i < participant.immunities.length - 1 ? ',' : ''}
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                  )}
-                                  {participant.weaknesses && participant.weaknesses.length > 0 && (
-                                    <div className="mt-2">
-                                      <strong>Weaknesses:</strong>
-                                      <ul className={participant.weaknesses.length > 2 ? "mb-0 ps-3 d-flex flex-wrap gap-2 list-unstyled flex-row" : "mb-0 ps-3"}>
-                                        {participant.weaknesses.map((weakness, i) => (
-                                          <li key={`${participant.battleId}-weakness-${i}`} style={{ listStyleType: participant.weaknesses.length > 2 ? 'none' : 'disc' }}>
-                                            {weakness.type} {weakness.value}
-                                            {participant.weaknesses.length > 2 && i < participant.weaknesses.length - 1 ? ',' : ''}
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                  )}
-                                  {participant.type === 'creature' && (
-                                    <>
-                                      {((participant.attacks && Array.isArray(participant.attacks) && participant.attacks.length > 0) || (participant.actions && participant.actions.length > 0)) && (
-                                        <div>
-                                          <div
-                                            className="mt-2 mb-2"
-                                            style={{ 
-                                              cursor: 'pointer',
-                                              fontSize: '1.1em',
-                                              fontWeight: 'bold',
-                                              color: '#0d6efd',
-                                              display: 'flex',
-                                              alignItems: 'center',
-                                              gap: '0.5rem'
-                                            }}
-                                            onClick={() => setExpandedAttacks(prev => ({
-                                              ...prev,
-                                              [participant.battleId]: !prev[participant.battleId]
-                                            }))}
-                                          >
-                                            <span>Attacks & Actions</span>
-                                            <span style={{ fontSize: '0.8em' }}>{expandedAttacks[participant.battleId] ? '▼' : '▶'}</span>
-                                          </div>
-                                          {expandedAttacks[participant.battleId] && (
-                                            <>
-                                              {participant.attacks && Array.isArray(participant.attacks) && participant.attacks.length > 0 && (
-                                                <>
-                                                  {/* Melee Attacks Section */}
-                                                  {participant.attacks.some(atk => (atk.attackCategory || atk.attackType) === 'melee') && (
-                                                    <div className="mt-2">
-                                                      <strong>Melee Attacks:</strong>
-                                                      <ul className="mb-0 ps-3">
-                                                        {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'melee').map((atk, i) => (
-                                                          atk.attackName ? (
-                                                            <li key={`${participant.battleId}-melee-${i}`} style={{ listStyleType: 'disc' }}>
-                                                              {atk.attackName} {renderAttackModifiers(participant, atk)}
-                                                              {renderDamage(participant, atk)}
-                                                            </li>
-                                                          ) : null
-                                                        ))}
-                                                      </ul>
-                                                    </div>
-                                                  )}
-                                                  {/* Ranged Attacks Section */}
-                                                  {participant.attacks.some(atk => (atk.attackCategory || atk.attackType) === 'ranged') && (
-                                                    <div className="mt-2">
-                                                      <strong>Ranged Attacks:</strong>
-                                                      <ul className="mb-0 ps-3">
-                                                        {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'ranged').map((atk, i) => (
-                                                          atk.attackName ? (
-                                                            <li key={`${participant.battleId}-ranged-${i}`} style={{ listStyleType: 'disc' }}>
-                                                              {atk.attackName} {renderAttackModifiers(participant, atk)}
-                                                              {renderDamage(participant, atk)}
-                                                            </li>
-                                                          ) : null
-                                                        ))}
-                                                      </ul>
-                                                    </div>
-                                                  )}
-                                                  {/* Spell Attacks Section */}
-                                                  {participant.attacks.some(atk => (atk.attackCategory || atk.attackType) === 'spell') && (
-                                                    <div className="mt-2">
-                                                      <strong>Spell Attacks:</strong>
-                                                      <ul className="mb-0 ps-3">
-                                                        {participant.attacks.filter(atk => (atk.attackCategory || atk.attackType) === 'spell').map((atk, i) => {
-                                                          const spellKey = `${participant.battleId}-spell-${i}`;
-                                                          const isExpanded = expandedSpells[spellKey];
-                                                          let icon = null;
-                                                          if (atk.actions === '1') icon = action1;
-                                                          else if (atk.actions === '2') icon = action2;
-                                                          else if (atk.actions === '3') icon = action3;
-                                                          else if (atk.actions === 'free') icon = freeAction;
-                                                          return atk.attackName ? (
-                                                            <li key={spellKey} style={{ listStyleType: 'circle', cursor: atk.description ? 'pointer' : 'default' }} onClick={() => atk.description && setExpandedSpells(prev => ({ ...prev, [spellKey]: !prev[spellKey] }))}>
-                                                              <span className="text-muted"></span> <strong style={{ marginLeft: 4 }}>{atk.attackName}</strong>
-                                                              {icon && (
-                                                                <img
-                                                                  src={icon}
-                                                                  alt={`${atk.actions} action(s)`}
-                                                                  style={{ height: '1.2em', verticalAlign: 'middle', marginLeft: 8, marginRight: 4 }}
-                                                                />
-                                                              )}
-                                                              {atk.range && <span>, Range: {atk.range}</span>}
-                                                              {atk.targets && <span>, Targets: {atk.targets}</span>}
-                                                              {atk.duration && <span>, Duration: {atk.duration}</span>}
-                                                              {atk.description && (
-                                                                <span className="ms-2" style={{ fontSize: '0.8em', color: '#666' }}>{isExpanded ? '▼' : '▶'}</span>
-                                                              )}
-                                                              {isExpanded && atk.description && (
-                                                                <div
-                                                                  className="mt-1 mb-1"
-                                                                  style={{ marginLeft: 24, padding: '8px', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #dee2e6' }}
-                                                                  onClick={e => {
-                                                                    const target = e.target;
-                                                                    if (target.classList && target.classList.contains('condition-link')) {
-                                                                      e.preventDefault();
-                                                                      e.stopPropagation();
-                                                                      const condName = target.getAttribute('data-condition');
-                                                                      const found = conditionList.find(c => c.name === condName);
-                                                                      if (found) {
-                                                                        setConditionModalData(found);
-                                                                        setShowConditionModal(true);
-                                                                      }
-                                                                    }
-                                                                  }}
-                                                                >
-                                                                  {renderSpellDescription(atk.description)}
-                                                                </div>
-                                                              )}
-                                                            </li>
-                                                          ) : null;
-                                                        })}
-                                                      </ul>
-                                                    </div>
-                                                  )}
-                                                  {/* Regular Spells Section */}
-                                                  {renderRegularSpellsListLikeAttackSpells(participant.attacks, expandedSpells, setExpandedSpells, participant)}
-                                                </>
-                                              )}
-                                              {/* Actions Section */}
-                                              {participant.actions && participant.actions.length > 0 && (
-                                                <div className="mt-2">
-                                                  {renderCreatureActions(participant)}
-                                                </div>
-                                              )}
-                                            </>
-                                          )}
-                                        </div>
-                                      )}
-                                    </>
-                                  )}
-                                </>
+                                <CreatureCard
+                                  participant={participant}
+                                  currentTurn={currentTurn}
+                                  expandedAttacks={expandedAttacks}
+                                  setExpandedAttacks={setExpandedAttacks}
+                                  expandedSpells={expandedSpells}
+                                  setExpandedSpells={setExpandedSpells}
+                                  onDeleteClick={handleDeleteClick}
+                                  onWeakAdjustment={handleWeakAdjustment}
+                                  onEliteAdjustment={handleEliteAdjustment}
+                                  onEditCreatureClick={handleEditCreatureClick}
+                                  hpInputValues={hpInputValues}
+                                  tempHpInputValues={tempHpInputValues}
+                                  onHpInputChange={handleHpInputChange}
+                                  onTempHpInputChange={handleTempHpInputChange}
+                                  onHpAdd={handleHpAdd}
+                                  onHpSubtract={handleHpSubtract}
+                                  onTempHpAdd={handleTempHpAdd}
+                                />
                               ) : (
-                                <div className="d-flex flex-column align-items-start ms-2 mb-1">
-                                  <div className="mb-1">
-                                    HP: {participant.hp} / {participant.maxHp !== undefined && participant.maxHp !== '' ? participant.maxHp : participant.hp}
-                                    {participant.tempHp > 0 && (
-                                      <span className="text-info ms-2">(+{participant.tempHp} temp)</span>
-                                    )}
-                                  </div>
-                                  <div className="d-flex flex-column ms-2 mb-1" style={{ gap: '0.5rem' }}>
-                                    <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
-                                      <input
-                                        type="number"
-                                        className="form-control d-inline-block"
-                                        style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
-                                        value={hpInputValues[participant.battleId] || ''}
-                                        onChange={e => handleHpInputChange(participant.battleId, e.target.value)}
-                                        placeholder="HP"
-                                      />
-                                      <Button
-                                        variant="outline-success"
-                                        size="sm"
-                                        className="ms-1"
-                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                                        onClick={() => handleHpHeal(participant)}
-                                        disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
-                                      >
-                                        +
-                                      </Button>
-                                      <Button
-                                        variant="outline-danger"
-                                        size="sm"
-                                        className="ms-1"
-                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                                        onClick={() => handleHpDeduct(participant)}
-                                        disabled={!hpInputValues[participant.battleId] || isNaN(Number(hpInputValues[participant.battleId]))}
-                                      >
-                                        -
-                                      </Button>
-                                    </div>
-                                    <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
-                                      <input
-                                        type="number"
-                                        className="form-control d-inline-block"
-                                        style={{ width: 60, height: 32, fontSize: '0.9rem', padding: '2px 8px' }}
-                                        value={tempHpInputValues[participant.battleId] || ''}
-                                        onChange={e => handleTempHpInputChange(participant.battleId, e.target.value)}
-                                        placeholder="Temp"
-                                      />
-                                      <Button
-                                        variant="outline-info"
-                                        size="sm"
-                                        className="ms-1"
-                                        style={{ height: 32, width: 40, padding: 0, fontSize: '1.2rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                                        onClick={() => handleTempHpAdd(participant)}
-                                        disabled={!tempHpInputValues[participant.battleId] || isNaN(Number(tempHpInputValues[participant.battleId]))}
-                                      >
-                                        +
-                                      </Button>
-                                    </div>
-                                  </div>
-                                  <div className="mt-1">
-                                    <span className="ms-2">AC: {renderStat(participant, 'ac', participant.ac || 0)}</span>
-                                    {participant.level !== undefined && participant.level !== null && (
-                                      <span className="ms-2">Level: {renderStat(participant, 'level', participant.level)}</span>
-                                    )}
-                                  </div>
-                                  {participant.type === 'creature' && (
-                                    <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
-                                      Fortitude: {renderStat(participant, 'fortitude', participant.fortitude)}
-                                      <span className="ms-2">
-                                        Reflex: {renderStat(participant, 'reflex', participant.reflex)}
-                                      </span>
-                                      Will: {renderStat(participant, 'will', participant.will)}
-                                    </div>
-                                  )}
-                                </div>
+                                <PlayerCard
+                                  participant={participant}
+                                  currentTurn={currentTurn}
+                                  hpInputValues={hpInputValues}
+                                  tempHpInputValues={tempHpInputValues}
+                                  onHpInputChange={handleHpInputChange}
+                                  onTempHpInputChange={handleTempHpInputChange}
+                                  onHpAdd={handleHpAdd}
+                                  onHpSubtract={handleHpSubtract}
+                                  onTempHpAdd={handleTempHpAdd}
+                                  onDeleteClick={handleDeleteClick}
+                                  onEditPlayerClick={handleEditPlayerClick}
+                                />
                               )}
                             </div>
-                            {/* {participant.type === 'creature' && participant.actions && participant.actions.length > 0 && (
-                              <div className="mt-2">
-                                {renderCreatureActions(participant)}
-                              </div>
-                            )} */}
                             {participant.conditions && Object.entries(participant.conditions).length > 0 && (
                               <div className="mt-2">
                                 <strong>Conditions:</strong>
@@ -1878,54 +1401,19 @@ function BattleTab({
                               </div>
                             )}
                           </div>
-                          <div className="d-flex gap-2 ms-auto">
-                            <Button
-                              variant={currentTurn === participant.battleId ? "light" : "outline-danger"}
-                              size="sm"
-                              onClick={() => handleDeleteClick(participant)}
-                            >
-                              <Trash />
-                            </Button>
-                            {participant.type === 'creature' && (
-                              <>
-                                <Button
-                                  variant={currentTurn === participant.battleId ? "light" : participant.isWeak ? "warning" : "outline-warning"}
-                                  size="sm"
-                                  className="ms-1"
-                                  onClick={() => handleWeakAdjustment(participant)}
-                                >
-                                  {participant.isWeak ? 'WEAK ✓' : 'WEAK'}
-                                </Button>
-                                <Button
-                                  variant={currentTurn === participant.battleId ? "light" : participant.isElite ? "success" : "outline-success"}
-                                  size="sm"
-                                  className="ms-1"
-                                  onClick={() => handleEliteAdjustment(participant)}
-                                >
-                                  {participant.isElite ? 'ELITE ✓' : 'ELITE'}
-                                </Button>
-                                <Button
-                                  variant={currentTurn === participant.battleId ? "light" : "outline-primary"}
-                                  size="sm"
-                                  className="ms-1"
-                                  onClick={() => handleEditCreatureClick(participant)}
-                                >
-                                  <Pencil />
-                                </Button>
-                              </>
-                            )}
-                          </div>
                           {provided.placeholder}
                         </ListGroupItem>
                       )}
                     </Droppable>
                   ))}
                 </ListGroup>
-              </Card>
+              </div>
             </Col>
             {showConditionsMenu && (
               <Col md={3}>
-                <ConditionsMenu isBattleStarted={isBattleStarted} />
+                <div style={{ position: 'sticky', top: 0, zIndex: 1000 }}>
+                  <ConditionsMenu isBattleStarted={isBattleStarted} />
+                </div>
               </Col>
             )}
           </Row>
@@ -2182,6 +1670,13 @@ function BattleTab({
                           />
                         </div>
 
+                        <div className="mb-3">
+                          <CreatureSkillsForm
+                            skills={creatureToEdit.skills || {}}
+                            onChange={skills => handleEditCreatureChange('skills', skills)}
+                          />
+                        </div>
+
                         <div className="d-flex justify-content-end gap-2">
                           <Button variant="secondary" onClick={() => setEditCreatureDialogOpen(false)} type="button">Cancel</Button>
                           <Button variant="primary" type="submit">Save</Button>
@@ -2248,6 +1743,64 @@ function BattleTab({
                 </div>
                 <div className="modal-footer">
                   <Button variant="secondary" onClick={() => setShowConditionModal(false)}>Close</Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Player Edit Dialog */}
+        {editPlayerDialogOpen && playerToEdit && (
+          <div className="modal show fade d-block" tabIndex="-1" role="dialog" style={{ background: 'rgba(0,0,0,0.5)' }}>
+            <div className="modal-dialog" role="document">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Edit Player</h5>
+                  <button type="button" className="btn-close" onClick={() => setEditPlayerDialogOpen(false)}></button>
+                </div>
+                <div className="modal-body">
+                  <form onSubmit={e => { e.preventDefault(); handleEditPlayerSave(); }}>
+                    <div className="mb-3">
+                      <label className="form-label">Player Name</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={playerToEdit.name}
+                        onChange={e => handleEditPlayerChange('name', e.target.value)}
+                      />
+                    </div>
+                    <div className="mb-3">
+                      <label className="form-label">HP</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={playerToEdit.maxHp}
+                        onChange={e => handleEditPlayerChange('maxHp', e.target.value)}
+                      />
+                    </div>
+                    <div className="mb-3">
+                      <label className="form-label">AC</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={playerToEdit.ac}
+                        onChange={e => handleEditPlayerChange('ac', e.target.value)}
+                      />
+                    </div>
+                    <div className="mb-3">
+                      <label className="form-label">Level</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={playerToEdit.level}
+                        onChange={e => handleEditPlayerChange('level', e.target.value)}
+                      />
+                    </div>
+                    <div className="d-flex justify-content-end gap-2">
+                      <Button variant="secondary" onClick={() => setEditPlayerDialogOpen(false)} type="button">Cancel</Button>
+                      <Button variant="primary" type="submit">Save</Button>
+                    </div>
+                  </form>
                 </div>
               </div>
             </div>
