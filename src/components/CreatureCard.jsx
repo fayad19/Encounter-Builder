@@ -372,6 +372,28 @@ function CreatureCard({
           Will: {renderStatWithStyle('will', participant.will)}
         </div>
 
+        {participant.skills && Object.keys(participant.skills).length > 0 && (
+          <div className="mt-1">
+            <strong>Skills:</strong>
+            <div className="d-flex flex-wrap gap-2">
+              {Object.entries(participant.skills).map(([skillName, skillData]) => {
+                const value = typeof skillData === 'object' ? skillData.value : skillData;
+                const special = typeof skillData === 'object' ? skillData.special : null;
+                return (
+                  <span key={skillName} className="me-2">
+                    {skillName.charAt(0).toUpperCase() + skillName.slice(1)}: {renderStatWithStyle(`skill_${skillName}`, value)}
+                    {special && special.map((sp, idx) => (
+                      <span key={idx} className="text-muted ms-1">
+                        ({sp.base} {sp.label})
+                      </span>
+                    ))}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="d-flex align-items-center mt-1" style={{ gap: '0.5rem' }}>
           DC: {renderStatWithStyle('dc', participant.dc)}
           <span className="ms-2">

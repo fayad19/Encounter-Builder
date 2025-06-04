@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Form, Row, Col, Card, Spinner, Alert, Button, Pagination } from 'react-bootstrap';
 import SpellDetailModal from './SpellDetailModal';
-import spellSummary from '../data/spell-summary.json';
 import { searchSpells } from '../services/spellDB';
 
 function SpellsTab({ onAddSpell }) {
@@ -15,24 +14,55 @@ function SpellsTab({ onAddSpell }) {
   const [modalLoading, setModalLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [filteredSpells, setFilteredSpells] = useState([]);
+  const [allLevels, setAllLevels] = useState([]);
   const spellsPerPage = 20;
 
-  // Get all unique levels for filter dropdown
-  const allLevels = Array.from(new Set(spellSummary.map(s => s.level))).sort((a, b) => a - b);
+  // Load initial data and get all unique levels
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        const allSpells = await searchSpells('');
+        const levels = Array.from(new Set(allSpells.map(s => s.level))).sort((a, b) => a - b);
+        setAllLevels(levels);
+        setFilteredSpells(allSpells);
+      } catch (error) {
+        console.error('Error loading initial data:', error);
+        setError('Failed to load spells');
+      }
+    };
+    loadInitialData();
+  }, []);
 
   // Filtering logic (applied on every filter change) - filters over all spells
   useEffect(() => {
-    setLoading(true);
-    let filtered = spellSummary;
-    if (searchTerm) {
-      filtered = filtered.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
-    }
-    if (levelFilter !== '') {
-      filtered = filtered.filter(s => s.level === Number(levelFilter));
-    }
-    setFilteredSpells(filtered);
-    setCurrentPage(1); // Reset to page 1 on filter change
-    setLoading(false);
+    const loadSpells = async () => {
+      setLoading(true);
+      try {
+        // Get full spell data from database
+        const allSpells = await searchSpells('');
+        let filtered = allSpells;
+        
+        if (searchTerm) {
+          const searchTermLower = searchTerm.toLowerCase();
+          filtered = filtered.filter(s => 
+            s.name.toLowerCase().includes(searchTermLower) || 
+            (s.oldName && s.oldName.toLowerCase().includes(searchTermLower))
+          );
+        }
+        if (levelFilter !== '') {
+          filtered = filtered.filter(s => s.level === Number(levelFilter));
+        }
+        setFilteredSpells(filtered);
+        setCurrentPage(1); // Reset to page 1 on filter change
+      } catch (error) {
+        console.error('Error loading spells:', error);
+        setError('Failed to load spells');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadSpells();
   }, [searchTerm, levelFilter]);
 
   // Pagination logic - slice the filtered spells for the current page
@@ -44,12 +74,14 @@ function SpellsTab({ onAddSpell }) {
 
   // Load full spell data on card click
   const handleSpellClick = async (spell) => {
+    //console.log('Clicked spell:', spell);
     setShowModal(true);
     setModalLoading(true);
     setSelectedSpell(null);
     setError(null);
     try {
       const results = await searchSpells(spell.name);
+      //console.log('Search results:', results);
       if (results.length === 0) throw new Error('Spell not found in database');
       setSelectedSpell(results[0]);
     } catch (err) {
@@ -85,7 +117,7 @@ function SpellsTab({ onAddSpell }) {
 
     // Show left ellipsis if needed
     if (showLeftEllipsis) {
-      items.push(<Pagination.Ellipsis key="left-ellipsis" disabled />);
+      items.push(<Pagination.Ellipsis key="leftEllipsis" disabled />);
     }
 
     // Show pages around current page
@@ -99,7 +131,7 @@ function SpellsTab({ onAddSpell }) {
     }
     for (let i = startPage; i <= endPage; i++) {
       items.push(
-        <Pagination.Item key={i} active={i === currentPage} onClick={() => setCurrentPage(i)}>
+        <Pagination.Item key={`page-${i}`} active={i === currentPage} onClick={() => setCurrentPage(i)}>
           {i}
         </Pagination.Item>
       );
@@ -107,7 +139,7 @@ function SpellsTab({ onAddSpell }) {
 
     // Show right ellipsis if needed
     if (showRightEllipsis) {
-      items.push(<Pagination.Ellipsis key="right-ellipsis" disabled />);
+      items.push(<Pagination.Ellipsis key="rightEllipsis" disabled />);
     }
 
     // Always show last page if more than 1
@@ -123,9 +155,21 @@ function SpellsTab({ onAddSpell }) {
       <div className="d-flex justify-content-center mt-3">
         <div style={{ minWidth: '300px', maxWidth: '100%', overflowX: 'auto' }}>
           <Pagination className="justify-content-center mb-0">
-            {currentPage > 1 && <Pagination.Prev onClick={() => setCurrentPage(currentPage - 1)} />}
-            {items}
-            {currentPage < totalPages && <Pagination.Next onClick={() => setCurrentPage(currentPage + 1)} />}
+            {currentPage > 1 && (
+              <React.Fragment key="prev-fragment">
+                <Pagination.Prev onClick={() => setCurrentPage(currentPage - 1)} />
+              </React.Fragment>
+            )}
+            {items.map((item, index) => (
+              <React.Fragment key={`pagination-item-${index}`}>
+                {item}
+              </React.Fragment>
+            ))}
+            {currentPage < totalPages && (
+              <React.Fragment key="next-fragment">
+                <Pagination.Next onClick={() => setCurrentPage(currentPage + 1)} />
+              </React.Fragment>
+            )}
           </Pagination>
         </div>
       </div>
@@ -157,7 +201,7 @@ function SpellsTab({ onAddSpell }) {
           >
             <option value="">All Levels</option>
             {allLevels.map((lvl) => (
-              <option key={lvl} value={lvl}>Level {lvl}</option>
+              <option key={`level-${lvl}`} value={lvl}>Level {lvl}</option>
             ))}
           </Form.Control>
         </Col>
@@ -175,31 +219,43 @@ function SpellsTab({ onAddSpell }) {
         </Alert>
       ) : (
         <Row>
-          {spells.map((spell) => (
-            <Col key={spell.slug} md={4} className="mb-3">
-              <Card
-                onClick={() => handleSpellClick(spell)}
-                style={{ cursor: 'pointer' }}
-                className="h-100"
-              >
-                <Card.Body>
-                  <Card.Title>{spell.name}</Card.Title>
-                  <Card.Subtitle className="mb-2 text-muted">
-                    Level {spell.level}
-                  </Card.Subtitle>
-                  {spell.traits && spell.traits.length > 0 && (
-                    <div className="mb-2">
-                      {spell.traits.map((trait, index) => (
-                        <span key={index} className="badge bg-secondary me-1">
-                          {trait}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </Card.Body>
-              </Card>
-            </Col>
-          ))}
+          {spells.map((spell) => {
+            //console.log('Spell data:', spell);
+            return (
+              <Col key={spell.slug} md={4} className="mb-3">
+                <Card
+                  onClick={() => handleSpellClick(spell)}
+                  style={{ cursor: 'pointer' }}
+                  className="h-100"
+                >
+                  <Card.Body>
+                    <Card.Title>
+                      {spell.name}
+                      {spell.oldName && (
+                        <div>
+                          <small className="text-muted fst-italic" style={{ fontSize: '13px' }}>
+                            Previously: {spell.oldName}
+                          </small>
+                        </div>
+                      )}
+                    </Card.Title>
+                    <Card.Subtitle className="mb-2 text-muted">
+                      Level {spell.level}
+                    </Card.Subtitle>
+                    {spell.traits && spell.traits.length > 0 && (
+                      <div className="mb-2">
+                        {spell.traits.map((trait, index) => (
+                          <span key={`${spell.slug}-trait-${index}`} className="badge bg-secondary me-1">
+                            {trait}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </Card.Body>
+                </Card>
+              </Col>
+            );
+          })}
         </Row>
       )}
 
