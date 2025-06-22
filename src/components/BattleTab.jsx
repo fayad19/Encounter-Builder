@@ -862,10 +862,15 @@ function BattleTab({
       }
       onFinishTurn();
       
-      // Use setTimeout to ensure the DOM has updated with the new currentTurn
+      // Use setTimeout with a longer delay to ensure the DOM has updated
       setTimeout(() => {
         if (activeParticipantRef.current) {
-          activeParticipantRef.current.scrollIntoView({ behavior: 'smooth' });
+          activeParticipantRef.current.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+          });
+        } else {
+          console.log('Active participant ref not found');
         }
       }, 100);
     }
@@ -1218,10 +1223,15 @@ function BattleTab({
                     >
                       {(provided, snapshot) => (
                         <ListGroupItem
-                          ref={provided.innerRef}
+                          ref={(el) => {
+                            provided.innerRef(el);
+                            if (currentTurn === participant.battleId) {
+                              activeParticipantRef.current = el;
+                            }
+                          }}
                           {...provided.droppableProps}
                           style={{
-                            scrollMarginTop: '120px',
+                            scrollMarginTop: '150px',
                             ...provided.draggableProps?.style
                           }}
                           className={`d-flex justify-content-between align-items-center ${
@@ -1234,9 +1244,12 @@ function BattleTab({
                             snapshot.isDraggingOver ? 'droppable-active' : ''
                           }`}
                         >
-                          {/* Add a separate div for the active participant ref */}
+                          {/* Add back the separate ref div but position it at the top of the card */}
                           {currentTurn === participant.battleId && (
-                            <div ref={activeParticipantRef} style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0 }} />
+                            <div 
+                              ref={activeParticipantRef}
+                              style={{ position: 'absolute', top: '-150px' }}
+                            />
                           )}
                           <div className="d-flex flex-column flex-grow-1">
                             <div>
@@ -1496,56 +1509,56 @@ function BattleTab({
                       </div>
                       <div className="row">
                         <div className="col-md-12 mb-3">
-                          <div className="d-flex justify-content-between align-items-center mb-2">
-                            <h6 className="mb-0">Resistances</h6>
-                            <Button variant="outline-primary" size="sm" onClick={() => setCreatureToEdit(prev => ({ ...prev, resistances: [...(prev.resistances || []), { type: '', value: '' }] }))}>
-                              <Plus /> Add Resistance
-                            </Button>
-                          </div>
-                          {creatureToEdit.resistances && creatureToEdit.resistances.map((resistance, index) => (
-                            <div key={index} className="row mb-2">
-                              <div className="col-md-5">
-                                <input
-                                  type="text"
-                                  className="form-control"
-                                  value={resistance.type}
-                                  onChange={e => {
-                                    const updatedResistances = [...creatureToEdit.resistances];
-                                    updatedResistances[index] = { ...updatedResistances[index], type: e.target.value };
-                                    setCreatureToEdit(prev => ({ ...prev, resistances: updatedResistances }));
-                                  }}
-                                  placeholder="Resistance type (e.g., Fire)"
-                                />
-                              </div>
-                              <div className="col-md-5">
-                                <input
-                                  type="text"
-                                  className="form-control"
-                                  value={resistance.value}
-                                  onChange={e => {
-                                    const updatedResistances = [...creatureToEdit.resistances];
-                                    updatedResistances[index] = { ...updatedResistances[index], value: e.target.value };
-                                    setCreatureToEdit(prev => ({ ...prev, resistances: updatedResistances }));
-                                  }}
-                                  placeholder="Value (e.g., 5)"
-                                />
-                              </div>
-                              <div className="col-md-2">
-                                <Button
-                                  variant="outline-danger"
-                                  size="sm"
-                                  onClick={() => setCreatureToEdit(prev => ({ ...prev, resistances: prev.resistances.filter((_, i) => i !== index) }))}
-                                >
-                                  <Trash />
-                                </Button>
-                              </div>
+                            <div className="d-flex justify-content-between align-items-center mb-2">
+                              <h6 className="mb-0">Resistances</h6>
+                              <Button variant="outline-primary" size="sm" onClick={() => setCreatureToEdit(prev => ({ ...prev, resistances: [...(prev.resistances || []), { type: '', value: '' }] }))}>
+                                <Plus /> Add Resistance
+                              </Button>
                             </div>
-                          ))}
+                            {creatureToEdit.resistances && creatureToEdit.resistances.map((resistance, index) => (
+                              <div key={index} className="row mb-2">
+                                <div className="col-md-5">
+                                  <input
+                                    type="text"
+                                    className="form-control"
+                                    value={resistance.type}
+                                    onChange={e => {
+                                      const updatedResistances = [...creatureToEdit.resistances];
+                                      updatedResistances[index] = { ...updatedResistances[index], type: e.target.value };
+                                      setCreatureToEdit(prev => ({ ...prev, resistances: updatedResistances }));
+                                    }}
+                                    placeholder="Resistance type (e.g., Fire)"
+                                  />
+                                </div>
+                                <div className="col-md-5">
+                                  <input
+                                    type="text"
+                                    className="form-control"
+                                    value={resistance.value}
+                                    onChange={e => {
+                                      const updatedResistances = [...creatureToEdit.resistances];
+                                      updatedResistances[index] = { ...updatedResistances[index], value: e.target.value };
+                                      setCreatureToEdit(prev => ({ ...prev, resistances: updatedResistances }));
+                                    }}
+                                    placeholder="Value (e.g., 5)"
+                                  />
+                                </div>
+                                <div className="col-md-2">
+                                  <Button
+                                    variant="outline-danger"
+                                    size="sm"
+                                    onClick={() => setCreatureToEdit(prev => ({ ...prev, resistances: prev.resistances.filter((_, i) => i !== index) }))}
+                                  >
+                                    <Trash />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="row">
-                        <div className="col-md-12 mb-3">
+                        <div className="row">
+                          <div className="col-md-12 mb-3">
                             <div className="d-flex justify-content-between align-items-center mb-2">
                               <h6 className="mb-0">Immunities</h6>
                               <Button variant="outline-primary" size="sm" onClick={() => setCreatureToEdit(prev => ({ ...prev, immunities: [...(prev.immunities || []), ''] }))}>

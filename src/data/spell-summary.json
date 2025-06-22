@@ -80,7 +80,8 @@
     "slug": "caustic-blast",
     "index": 5,
     "type": "Cantrip",
-    "source": "Player Core pg. 319"
+    "source": "Player Core pg. 319",
+    "oldName": "Acid Splash"
   },
   {
     "name": "Clinging Ice",
@@ -300,7 +301,8 @@
     "slug": "figment",
     "index": 20,
     "type": "Cantrip",
-    "source": "Player Core pg. 331"
+    "source": "Player Core pg. 331",
+    "oldName": "Ghost Sound"
   },
   {
     "name": "Forbidden Thought",
@@ -357,7 +359,8 @@
     "slug": "frostbite",
     "index": 24,
     "type": "Cantrip",
-    "source": "Player Core pg. 332"
+    "source": "Player Core pg. 332",
+    "oldName": "Ray of Frost"
   },
   {
     "name": "Gale Blast",
@@ -451,7 +454,8 @@
     "slug": "ignition",
     "index": 31,
     "type": "Cantrip",
-    "source": "Player Core pg. 336"
+    "source": "Player Core pg. 336",
+    "oldName": "Produce Flame"
   },
   {
     "name": "Illuminate",
@@ -549,7 +553,8 @@
     "slug": "know-the-way",
     "index": 38,
     "type": "Cantrip",
-    "source": "Player Core pg. 340"
+    "source": "Player Core pg. 340",
+    "oldName": "Know Direction"
   },
   {
     "name": "Light",
@@ -622,7 +627,7 @@
     "slug": "needle-darts",
     "index": 43,
     "type": "Cantrip",
-    "source": "Rage of Elements pg. 144  \nPFS Note Any spells which require metal to function require the PC to be holding at least one chunk of that metal or an item made of that metal."
+    "source": "Rage of Elements pg. 144"
   },
   {
     "name": "Nudge Fate",
@@ -890,7 +895,7 @@
     "slug": "spirit-object",
     "index": 62,
     "type": "Cantrip",
-    "source": "Legends pg. 32  \nPFS Note Per design team clarification, an item animated by the spirit object hex uses the spellcaster’s spell DC as its AC. Its Hardness and Hit Points remain unchanged from their normal values as listed on page 577 of the Core Rulebook."
+    "source": "Legends pg. 32"
   },
   {
     "name": "Spout",
@@ -3515,7 +3520,7 @@
     "slug": "withering-grasp",
     "index": 242,
     "type": "Focus",
-    "source": "Gods & Magic pg. 113 2.0  \nPFS Note The Targets entry for withering grasp should be “1 creature or unattended object”, not “1 creature or object.” When used on an unattended object, the object takes persistent damage on your next turn."
+    "source": "Gods & Magic pg. 113 2.0"
   },
   {
     "name": "Word of Truth",
@@ -5384,7 +5389,7 @@
     "slug": "remember-the-lost",
     "index": 373,
     "type": "Focus",
-    "source": "Gods & Magic pg. 119 2.0  \nPFS Note For the purposes of Society play, remove the final sentence of remember the lost which states “A creature that truly knows no one who died with any sort of grievance to that creature is immune to this effect.”"
+    "source": "Gods & Magic pg. 119 2.0"
   },
   {
     "name": "Repel Metal",
@@ -6424,7 +6429,7 @@
     "slug": "claim-undead",
     "index": 445,
     "type": "Focus",
-    "source": "Advanced Player's Guide pg. 230 2.0  \nPFS Note For the purposes of Society play, the Targets entry for the claim undead oracle revelation spell is “1 mindless undead creature”, not “1 undead creature.” The intent of this change is to reduce the prevalence of domination magic on sapient creatures in Society play."
+    "source": "Advanced Player's Guide pg. 230 2.0"
   },
   {
     "name": "Dread Secret",
@@ -7582,7 +7587,7 @@
     "slug": "fold-metal",
     "index": 530,
     "type": "Spell",
-    "source": "Rage of Elements pg. 143  \nPFS Note For the purposes of the fold metal spell in Pathfinder Society play, objects which are part of a structure (such as a door, or a lock on a window) are not considered \"unattended.\""
+    "source": "Rage of Elements pg. 143"
   },
   {
     "name": "Force Barrage",
@@ -8682,7 +8687,7 @@
     "slug": "summon-lesser-servitor",
     "index": 617,
     "type": "Spell",
-    "source": "Secrets of Magic pg. 134 1.1  \nPFS Note The summon lesser servitor spell cannot be used to summon imps."
+    "source": "Secrets of Magic pg. 134 1.1"
   },
   {
     "name": "Summon Plant or Fungus",
@@ -8694,19 +8699,6 @@
     ],
     "slug": "summon-plant-or-fungus",
     "index": 618,
-    "type": "Spell",
-    "source": "Player Core pg. 361"
-  },
-  {
-    "name": "Summon Undead",
-    "level": 1,
-    "traits": [
-      "concentrate",
-      "manipulate",
-      "summon"
-    ],
-    "slug": "summon-undead",
-    "index": 619,
     "type": "Spell",
     "source": "Player Core pg. 361"
   },
@@ -14788,7 +14780,7 @@
     "slug": "elemental-breath",
     "index": 1094,
     "type": "Spell",
-    "source": "Rage of Elements pg. 222  \nPFS Note Remove the range from the elemental breath spell. The cone is created from the user's square."
+    "source": "Rage of Elements pg. 222"
   },
   {
     "name": "Elemental Form",
@@ -16254,7 +16246,7 @@
     "slug": "field-of-razors",
     "index": 1205,
     "type": "Spell",
-    "source": "Rage of Elements pg. 143  \nPFS Note Any spells which require metal to function require the PC to be holding at least one chunk of that metal or an item made of that metal."
+    "source": "Rage of Elements pg. 143"
   },
   {
     "name": "Flame Vortex",
@@ -17590,7 +17582,7 @@
     "slug": "all-is-one-one-is-all",
     "index": 1306,
     "type": "Spell",
-    "source": "Legends pg. 64  \nPFS Note If a target of all is one, one is all does not consent to the allocation of Hit Points resulting from this spell, they become an unwilling target and they (and their Hit Points) are removed from the spell’s effect. The spell can continue with any remaining targets."
+    "source": "Legends pg. 64"
   },
   {
     "name": "Antimagic Field",
@@ -18269,7 +18261,7 @@
     "slug": "magnetic-dominion",
     "index": 1358,
     "type": "Spell",
-    "source": "Rage of Elements pg. 143  \nPFS Note Movement caused by the magnetic dominion spell is forced movement."
+    "source": "Rage of Elements pg. 143"
   },
   {
     "name": "Massacre",
