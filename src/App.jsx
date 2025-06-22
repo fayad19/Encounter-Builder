@@ -9,10 +9,12 @@ import fillip from './assets/fillip.mp3';
 import fillipBg from './assets/fillip.jpg';
 import kidMeme from './assets/kid-meme.gif';
 import SpellsTab from './components/SpellsTab';
+import EncounterSharing from './components/EncounterSharing';
 import { loadMonstersIntoDB, isDatabasePopulated as isMonsterDBPopulated } from './services/monsterDB';
 import { loadSpellsIntoDB, isDatabasePopulated as isSpellDBPopulated } from './services/spellDB';
 import { calculateCurrentResistances } from './utils/creatureConversion';
 import quickRefData from './data/quickRef.json';
+import './styles/EncounterSharing.css';
 
 function App() {
   const audioRef = useRef(null);
@@ -872,6 +874,9 @@ function App() {
             <Nav.Item>
               <Nav.Link eventKey="references">References</Nav.Link>
             </Nav.Item>
+            <Nav.Item>
+              <Nav.Link eventKey="share">Share</Nav.Link>
+            </Nav.Item>
           </Nav>
 
           {showKidMeme && (
@@ -966,6 +971,39 @@ function App() {
                   )}
                 </div>
               </div>
+            </Tab.Pane>
+            <Tab.Pane eventKey="share">
+              <EncounterSharing 
+                onDataLoaded={(data) => {
+                  // This callback will be called when data is loaded from Firebase
+                  console.log('Encounter data loaded:', data);
+                  
+                  // The localStorage data has already been restored by EncounterService
+                  // Force re-read from localStorage to update the UI
+                  try {
+                    const updatedCreatures = JSON.parse(localStorage.getItem('creatures') || '[]');
+                    const updatedBattleCreatures = JSON.parse(localStorage.getItem('battleCreatures') || '[]');
+                    const updatedPlayers = JSON.parse(localStorage.getItem('players') || '[]');
+                    const updatedBattleParticipants = JSON.parse(localStorage.getItem('battleParticipants') || '[]');
+                    const updatedCurrentTurn = localStorage.getItem('currentTurn');
+                    const updatedBattleStarted = localStorage.getItem('battleStarted') === 'true';
+                    const updatedCurrentRound = parseInt(localStorage.getItem('currentRound') || '1');
+                    
+                    // Update state to reflect the loaded data
+                    setCreatures(updatedCreatures);
+                    setBattleCreatures(updatedBattleCreatures);
+                    setPlayers(updatedPlayers);
+                    setBattleParticipants(updatedBattleParticipants);
+                    setCurrentTurn(updatedCurrentTurn);
+                    setBattleStarted(updatedBattleStarted);
+                    setCurrentRound(updatedCurrentRound);
+                    
+                    console.log('App state updated with loaded encounter data');
+                  } catch (error) {
+                    console.error('Error updating app state:', error);
+                  }
+                }}
+              />
             </Tab.Pane>
           </Tab.Content>
         </Tab.Container>

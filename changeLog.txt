@@ -1,3 +1,8 @@
+--v.0.3.0-DEV
+---- DEV BUILD, TESTS REQUIRED ----
+- Added Firebase support to share config with other users
+
+
 --v.0.2.3
 - Added Attacks&Actions tab to hide long list of actions and Attacks.
 - Added DC and Spell Attack Modifier to monsters.
