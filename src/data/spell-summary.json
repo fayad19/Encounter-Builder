@@ -11608,6 +11608,7 @@
     "name": "Fireball",
     "level": 3,
     "traits": [
+      "attack",
       "concentrate",
       "fire",
       "manipulate"

@@ -740,27 +740,11 @@ function App() {
   }, []); // Empty dependency array since these functions don't need to be recreated
 
   // Add handleAddSpell function
-  const handleAddSpell = (spell) => {
-    // Convert spell to attack format
-    const spellAttack = {
-      id: Date.now(),
-      attackName: spell.name,
-      attackType: spell.system.damage ? 'spell' : 'regularSpell',
-      attackCategory: spell.system.damage ? 'spell' : 'regularSpell',
-      actions: spell.system.time?.value || '2',
-      range: spell.system.range?.value || '',
-      description: spell.system.description?.value || '',
-      targetOrArea: spell.system.area ? 'area' : 'target',
-      area: spell.system.area ? `${spell.system.area.value}-foot ${spell.system.area.type}` : '',
-      areaType: spell.system.area?.type || '',
-      save: spell.system.defense?.save ? `${spell.system.defense.save.statistic}${spell.system.defense.save.basic ? ' (basic)' : ''}` : '',
-      damage: spell.system.damage ? Object.values(spell.system.damage).map(d => `${d.formula} ${d.type}`).join(' plus ') : '',
-      duration: spell.system.duration?.value || '',
-      targets: spell.system.target?.value || ''
-    };
-
-    // Add to creatures list as a spell
-    setCreatures(prev => [...prev, spellAttack]);
+  const handleAddSpell = (updatedCreature) => {
+    // Update the creature in the creatures list
+    setCreatures(prev => prev.map(creature => 
+      creature.id === updatedCreature.id ? updatedCreature : creature
+    ));
   };
 
   // Initialize databases on component mount
@@ -926,7 +910,10 @@ function App() {
               <BestiaryTab onAddCreature={handleAddCreature} />
             </Tab.Pane>
             <Tab.Pane eventKey="spells">
-              <SpellsTab onAddSpell={handleAddSpell} />
+              <SpellsTab
+                onAddSpell={handleAddSpell}
+                savedCreatures={creatures}
+              />
             </Tab.Pane>
             <Tab.Pane eventKey="references">
               <div className="mb-3 d-flex gap-2">
@@ -1010,7 +997,7 @@ function App() {
         ) : null}
       </Container>
 
-      <footer className="bg-light py-3 border-top" style={{ flexShrink: 0 }}>
+      {/* <footer className="bg-light py-3 border-top" style={{ flexShrink: 0 }}>
         <Container fluid>
           <div className="d-flex justify-content-center">
             <Button 
@@ -1022,7 +1009,7 @@ function App() {
             </Button>
           </div>
         </Container>
-      </footer>
+      </footer> */}
 
       <Modal show={showStopConfirmModal} onHide={handleStopCancel} centered>
         <Modal.Header closeButton>

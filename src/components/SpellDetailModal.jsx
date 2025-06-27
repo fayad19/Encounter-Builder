@@ -1,7 +1,9 @@
-import React from 'react';
-import { Modal, Table, Button } from 'react-bootstrap';
+import React, { useState } from 'react';
+import { Modal, Table, Button, Dropdown } from 'react-bootstrap';
 
-function SpellDetailModal({ spell, show, onHide, onAddSpell }) {
+function SpellDetailModal({ spell, show, onHide, onAddSpell, savedCreatures }) {
+  const [showCreatureDropdown, setShowCreatureDropdown] = useState(false);
+
   if (!spell) return null;
 
   // Helper function to clean up spell descriptions and handle UUID references
@@ -113,6 +115,37 @@ function SpellDetailModal({ spell, show, onHide, onAddSpell }) {
     return rows;
   };
 
+  const handleAddSpellToCreature = (creature) => {
+    // Convert spell to attack format
+    const isAttackSpell = spell.traits?.includes('attack') || 
+                         spell.description?.toLowerCase().includes('spell attack') ||
+                         spell.description?.toLowerCase().includes('ranged attack') ||
+                         spell.description?.toLowerCase().includes('melee attack');
+
+    const spellAttack = {
+      id: Date.now(),
+      attackName: spell.name,
+      attackType: isAttackSpell ? 'spell' : 'regularSpell',
+      attackCategory: isAttackSpell ? 'spell' : 'regularSpell',
+      actions: spell.cast?.includes('1') ? '1' : spell.cast?.includes('2') ? '2' : spell.cast?.includes('3') ? '3' : '2',
+      range: spell.range || '',
+      description: spell.description || '',
+      targetOrArea: spell.area ? 'area' : 'target',
+      area: spell.area || '',
+      duration: spell.duration || '',
+      targets: spell.targets || ''
+    };
+
+    // Add spell to creature
+    const updatedCreature = {
+      ...creature,
+      attacks: [...(creature.attacks || []), spellAttack]
+    };
+
+    onAddSpell(updatedCreature);
+    setShowCreatureDropdown(false);
+  };
+
   return (
     <Modal show={show} onHide={onHide} size="lg">
       <Modal.Header closeButton>
@@ -138,9 +171,27 @@ function SpellDetailModal({ spell, show, onHide, onAddSpell }) {
 
       </Modal.Body>
       <Modal.Footer>
-        <Button variant="primary" onClick={() => onAddSpell && onAddSpell(spell)}>
-          Add to Spells
-        </Button>
+        {showCreatureDropdown ? (
+          <Dropdown>
+            <Dropdown.Toggle variant="primary">
+              Select Creature
+            </Dropdown.Toggle>
+            <Dropdown.Menu>
+              {savedCreatures?.map((creature) => (
+                <Dropdown.Item 
+                  key={creature.id} 
+                  onClick={() => handleAddSpellToCreature(creature)}
+                >
+                  {creature.name}
+                </Dropdown.Item>
+              ))}
+            </Dropdown.Menu>
+          </Dropdown>
+        ) : (
+          <Button variant="primary" onClick={() => setShowCreatureDropdown(true)}>
+            Add to Creature
+          </Button>
+        )}
         <Button variant="secondary" onClick={onHide}>
           Close
         </Button>

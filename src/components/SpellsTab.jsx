@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Form, Row, Col, Card, Spinner, Alert, Button, Pagination } from 'react-bootstrap';
 import SpellDetailModal from './SpellDetailModal';
-import { searchSpells } from '../services/spellDB';
+import { searchSpells, clearSpellDB, loadSpellsIntoDB } from '../services/spellDB';
+import { ArrowClockwise } from 'react-bootstrap-icons';
 
-function SpellsTab({ onAddSpell }) {
+function SpellsTab({ onAddSpell, savedCreatures }) {
   const [spells, setSpells] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [levelFilter, setLevelFilter] = useState('');
@@ -94,98 +95,69 @@ function SpellsTab({ onAddSpell }) {
   const handleCloseModal = () => {
     setShowModal(false);
     setSelectedSpell(null);
-    setModalLoading(false);
-    setError(null);
   };
 
-  // Compute total pages for pagination
-  const totalPages = Math.ceil(filteredSpells.length / spellsPerPage);
-
-  // Render responsive, ellipsed pagination controls
+  // Pagination component
   const renderPagination = () => {
-    if (totalPages <= 1) return null;
-    const items = [];
-    const showLeftEllipsis = currentPage > 3;
-    const showRightEllipsis = currentPage < totalPages - 2;
+    if (filteredSpells.length <= spellsPerPage) return null;
 
-    // Always show first page
-    items.push(
-      <Pagination.Item key={1} active={1 === currentPage} onClick={() => setCurrentPage(1)}>
-        1
-      </Pagination.Item>
-    );
+    const totalPages = Math.ceil(filteredSpells.length / spellsPerPage);
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
 
-    // Show left ellipsis if needed
-    if (showLeftEllipsis) {
-      items.push(<Pagination.Ellipsis key="leftEllipsis" disabled />);
+    if (endPage - startPage + 1 < maxVisiblePages) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
     }
 
-    // Show pages around current page
-    let startPage = Math.max(2, currentPage - 1);
-    let endPage = Math.min(totalPages - 1, currentPage + 1);
-    if (!showLeftEllipsis) {
-      startPage = 2;
-    }
-    if (!showRightEllipsis) {
-      endPage = totalPages - 1;
-    }
+    const pages = [];
     for (let i = startPage; i <= endPage; i++) {
-      items.push(
-        <Pagination.Item key={`page-${i}`} active={i === currentPage} onClick={() => setCurrentPage(i)}>
+      pages.push(
+        <Pagination.Item
+          key={i}
+          active={i === currentPage}
+          onClick={() => setCurrentPage(i)}
+        >
           {i}
         </Pagination.Item>
       );
     }
 
-    // Show right ellipsis if needed
-    if (showRightEllipsis) {
-      items.push(<Pagination.Ellipsis key="rightEllipsis" disabled />);
-    }
-
-    // Always show last page if more than 1
-    if (totalPages > 1) {
-      items.push(
-        <Pagination.Item key={totalPages} active={totalPages === currentPage} onClick={() => setCurrentPage(totalPages)}>
-          {totalPages}
-        </Pagination.Item>
-      );
-    }
-
     return (
-      <div className="d-flex justify-content-center mt-3">
-        <div style={{ minWidth: '300px', maxWidth: '100%', overflowX: 'auto' }}>
-          <Pagination className="justify-content-center mb-0">
-            {currentPage > 1 && (
-              <React.Fragment key="prev-fragment">
-                <Pagination.Prev onClick={() => setCurrentPage(currentPage - 1)} />
-              </React.Fragment>
-            )}
-            {items.map((item, index) => (
-              <React.Fragment key={`pagination-item-${index}`}>
-                {item}
-              </React.Fragment>
-            ))}
-            {currentPage < totalPages && (
-              <React.Fragment key="next-fragment">
-                <Pagination.Next onClick={() => setCurrentPage(currentPage + 1)} />
-              </React.Fragment>
-            )}
-          </Pagination>
-        </div>
-      </div>
+      <Pagination className="justify-content-center mt-3">
+        <Pagination.First onClick={() => setCurrentPage(1)} disabled={currentPage === 1} />
+        <Pagination.Prev onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} />
+        {startPage > 1 && <Pagination.Ellipsis />}
+        {pages}
+        {endPage < totalPages && <Pagination.Ellipsis />}
+        <Pagination.Next onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} />
+        <Pagination.Last onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} />
+      </Pagination>
     );
   };
 
+  const handleReloadDatabase = async () => {
+    setLoading(true);
+    try {
+      await clearSpellDB();
+      await loadSpellsIntoDB();
+      const allSpells = await searchSpells('');
+      const levels = Array.from(new Set(allSpells.map(s => s.level))).sort((a, b) => a - b);
+      setAllLevels(levels);
+      setFilteredSpells(allSpells);
+      setCurrentPage(1);
+    } catch (error) {
+      console.error('Error reloading spell database:', error);
+      setError('Failed to reload spell database');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <Container fluid>
-      {error && !showModal && (
-        <Alert variant="danger" className="mt-3">
-          <Alert.Heading>Error Loading Spells</Alert.Heading>
-          <p>{error}</p>
-        </Alert>
-      )}
-      <Row className="mb-3">
-        <Col md={6}>
+    <Container className="mt-4">
+      <Row className="mb-4">
+        <Col md={7}>
           <Form.Control
             type="text"
             placeholder="Search spells..."
@@ -193,17 +165,26 @@ function SpellsTab({ onAddSpell }) {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </Col>
-        <Col md={4}>
-          <Form.Control
-            as="select"
+        <Col md={3}>
+          <Form.Select
             value={levelFilter}
             onChange={(e) => setLevelFilter(e.target.value)}
           >
             <option value="">All Levels</option>
-            {allLevels.map((lvl) => (
-              <option key={`level-${lvl}`} value={lvl}>Level {lvl}</option>
+            {allLevels.map(level => (
+              <option key={level} value={level}>Level {level}</option>
             ))}
-          </Form.Control>
+          </Form.Select>
+        </Col>
+        <Col md={2}>
+          <Button 
+            variant="outline-secondary" 
+            onClick={handleReloadDatabase}
+            disabled={loading}
+            className="w-100"
+          >
+            <ArrowClockwise /> Reload DB
+          </Button>
         </Col>
       </Row>
 
@@ -240,7 +221,7 @@ function SpellsTab({ onAddSpell }) {
                       )}
                     </Card.Title>
                     <Card.Subtitle className="mb-2 text-muted">
-                      Level {spell.level}
+                      level {spell.level}
                     </Card.Subtitle>
                     {spell.traits && spell.traits.length > 0 && (
                       <div className="mb-2">
@@ -268,6 +249,7 @@ function SpellsTab({ onAddSpell }) {
         onAddSpell={onAddSpell}
         loading={modalLoading}
         error={error && showModal ? error : null}
+        savedCreatures={savedCreatures}
       />
     </Container>
   );
